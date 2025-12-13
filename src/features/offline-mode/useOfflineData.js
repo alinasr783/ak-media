@@ -1,0 +1,293 @@
+import { useCallback } from 'react';
+import { useOffline } from './OfflineContext';
+import { 
+  STORE_NAMES, 
+  addItem, 
+  updateItem, 
+  deleteItem, 
+  getItem, 
+  getAllItems,
+  searchPatientsOffline,
+  addToQueue
+} from './offlineDB';
+
+export function useOfflineData() {
+  const { isOfflineMode, enqueueOperation } = useOffline();
+
+  // Patient operations
+  const createPatientOffline = useCallback(async (patientData) => {
+    if (!isOfflineMode) return null;
+
+    try {
+      // Generate a temporary local ID
+      const localId = `local_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const patientWithLocalId = {
+        ...patientData,
+        id: localId,
+        local_created_at: new Date().toISOString()
+      };
+
+      // Save to local database
+      await addItem(STORE_NAMES.PATIENTS, patientWithLocalId);
+
+      // Add to offline queue for sync when online
+      await addToQueue({
+        entityType: 'patient',
+        operation: 'create',
+        data: patientData,
+        localId: localId
+      });
+
+      return patientWithLocalId;
+    } catch (error) {
+      console.error('Error creating patient offline:', error);
+      throw error;
+    }
+  }, [isOfflineMode]);
+
+  const updatePatientOffline = useCallback(async (id, patientData) => {
+    if (!isOfflineMode) return null;
+
+    try {
+      const updatedPatient = {
+        ...patientData,
+        id,
+        local_updated_at: new Date().toISOString()
+      };
+
+      // Update in local database
+      await updateItem(STORE_NAMES.PATIENTS, id, updatedPatient);
+
+      // Add to offline queue for sync when online
+      await addToQueue({
+        entityType: 'patient',
+        operation: 'update',
+        entityId: id,
+        data: patientData
+      });
+
+      return updatedPatient;
+    } catch (error) {
+      console.error('Error updating patient offline:', error);
+      throw error;
+    }
+  }, [isOfflineMode]);
+
+  const deletePatientOffline = useCallback(async (id) => {
+    if (!isOfflineMode) return null;
+
+    try {
+      // Delete from local database
+      await deleteItem(STORE_NAMES.PATIENTS, id);
+
+      // Add to offline queue for sync when online
+      await addToQueue({
+        entityType: 'patient',
+        operation: 'delete',
+        entityId: id
+      });
+    } catch (error) {
+      console.error('Error deleting patient offline:', error);
+      throw error;
+    }
+  }, [isOfflineMode]);
+
+  // Appointment operations
+  const createAppointmentOffline = useCallback(async (appointmentData) => {
+    if (!isOfflineMode) return null;
+
+    try {
+      // Generate a temporary local ID
+      const localId = `local_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const appointmentWithLocalId = {
+        ...appointmentData,
+        id: localId,
+        local_created_at: new Date().toISOString()
+      };
+
+      // Save to local database
+      await addItem(STORE_NAMES.APPOINTMENTS, appointmentWithLocalId);
+
+      // Add to offline queue for sync when online
+      await addToQueue({
+        entityType: 'appointment',
+        operation: 'create',
+        data: appointmentData,
+        localId: localId
+      });
+
+      return appointmentWithLocalId;
+    } catch (error) {
+      console.error('Error creating appointment offline:', error);
+      throw error;
+    }
+  }, [isOfflineMode]);
+
+  const updateAppointmentOffline = useCallback(async (id, appointmentData) => {
+    if (!isOfflineMode) return null;
+
+    try {
+      const updatedAppointment = {
+        ...appointmentData,
+        id,
+        local_updated_at: new Date().toISOString()
+      };
+
+      // Update in local database
+      await updateItem(STORE_NAMES.APPOINTMENTS, id, updatedAppointment);
+
+      // Add to offline queue for sync when online
+      await addToQueue({
+        entityType: 'appointment',
+        operation: 'update',
+        entityId: id,
+        data: appointmentData
+      });
+
+      return updatedAppointment;
+    } catch (error) {
+      console.error('Error updating appointment offline:', error);
+      throw error;
+    }
+  }, [isOfflineMode]);
+
+  const deleteAppointmentOffline = useCallback(async (id) => {
+    if (!isOfflineMode) return null;
+
+    try {
+      // Delete from local database
+      await deleteItem(STORE_NAMES.APPOINTMENTS, id);
+
+      // Add to offline queue for sync when online
+      await addToQueue({
+        entityType: 'appointment',
+        operation: 'delete',
+        entityId: id
+      });
+    } catch (error) {
+      console.error('Error deleting appointment offline:', error);
+      throw error;
+    }
+  }, [isOfflineMode]);
+
+  // Treatment Plan operations
+  const createTreatmentPlanOffline = useCallback(async (treatmentPlanData) => {
+    if (!isOfflineMode) return null;
+
+    try {
+      // Generate a temporary local ID
+      const localId = `local_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const treatmentPlanWithLocalId = {
+        ...treatmentPlanData,
+        id: localId,
+        local_created_at: new Date().toISOString()
+      };
+
+      // Save to local database
+      await addItem(STORE_NAMES.TREATMENT_PLANS, treatmentPlanWithLocalId);
+
+      // Add to offline queue for sync when online
+      await addToQueue({
+        entityType: 'treatmentPlan',
+        operation: 'create',
+        data: treatmentPlanData,
+        localId: localId
+      });
+
+      return treatmentPlanWithLocalId;
+    } catch (error) {
+      console.error('Error creating treatment plan offline:', error);
+      throw error;
+    }
+  }, [isOfflineMode]);
+
+  const updateTreatmentPlanOffline = useCallback(async (id, treatmentPlanData) => {
+    if (!isOfflineMode) return null;
+
+    try {
+      const updatedTreatmentPlan = {
+        ...treatmentPlanData,
+        id,
+        local_updated_at: new Date().toISOString()
+      };
+
+      // Update in local database
+      await updateItem(STORE_NAMES.TREATMENT_PLANS, id, updatedTreatmentPlan);
+
+      // Add to offline queue for sync when online
+      await addToQueue({
+        entityType: 'treatmentPlan',
+        operation: 'update',
+        entityId: id,
+        data: treatmentPlanData
+      });
+
+      return updatedTreatmentPlan;
+    } catch (error) {
+      console.error('Error updating treatment plan offline:', error);
+      throw error;
+    }
+  }, [isOfflineMode]);
+
+  const deleteTreatmentPlanOffline = useCallback(async (id) => {
+    if (!isOfflineMode) return null;
+
+    try {
+      // Delete from local database
+      await deleteItem(STORE_NAMES.TREATMENT_PLANS, id);
+
+      // Add to offline queue for sync when online
+      await addToQueue({
+        entityType: 'treatmentPlan',
+        operation: 'delete',
+        entityId: id
+      });
+    } catch (error) {
+      console.error('Error deleting treatment plan offline:', error);
+      throw error;
+    }
+  }, [isOfflineMode]);
+
+  // Search functions
+  const searchOfflinePatients = useCallback(async (searchTerm) => {
+    if (!isOfflineMode) return [];
+    return searchPatientsOffline(searchTerm);
+  }, [isOfflineMode]);
+
+  // Get data functions
+  const getOfflinePatients = useCallback(async () => {
+    if (!isOfflineMode) return [];
+    return getAllItems(STORE_NAMES.PATIENTS);
+  }, [isOfflineMode]);
+
+  const getOfflineAppointments = useCallback(async () => {
+    if (!isOfflineMode) return [];
+    return getAllItems(STORE_NAMES.APPOINTMENTS);
+  }, [isOfflineMode]);
+
+  const getOfflineTreatmentPlans = useCallback(async () => {
+    if (!isOfflineMode) return [];
+    return getAllItems(STORE_NAMES.TREATMENT_PLANS);
+  }, [isOfflineMode]);
+
+  return {
+    // Patient operations
+    createPatientOffline,
+    updatePatientOffline,
+    deletePatientOffline,
+    searchOfflinePatients,
+    getOfflinePatients,
+    
+    // Appointment operations
+    createAppointmentOffline,
+    updateAppointmentOffline,
+    deleteAppointmentOffline,
+    getOfflineAppointments,
+    
+    // Treatment Plan operations
+    createTreatmentPlanOffline,
+    updateTreatmentPlanOffline,
+    deleteTreatmentPlanOffline,
+    getOfflineTreatmentPlans
+  };
+}

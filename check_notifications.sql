@@ -1,0 +1,1 @@
+SELECT COUNT(*) FROM notifications WHERE clinic_id = '7cf3a2a3-ee02-4a21-934f-be27f0e20d8f';

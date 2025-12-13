@@ -1,0 +1,400 @@
+import supabase from "./supabase"
+import { createPublicNotification } from "./apiNotifications"
+
+export async function getAppointments(search, page, pageSize, filters = {}) {
+    // Get current user's clinic_id
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) throw new Error("Not authenticated")
+
+    const { data: userData } = await supabase
+        .from("users")
+        .select("clinic_id")
+        .eq("user_id", session.user.id)
+        .single()
+
+    if (!userData?.clinic_id) throw new Error("User has no clinic assigned")
+
+    const from = Math.max(0, (page - 1) * pageSize)
+    const to = from + pageSize - 1
+
+    let query = supabase
+        .from("appointments")
+        .select(`
+      id,
+      date,
+      notes,
+      price,
+      status,
+      from,
+      age,
+      patient:patients(id, name, phone),
+      created_at
+    `, { count: "exact" })
+        .eq("clinic_id", userData.clinic_id)
+
+    // Apply time filter
+    if (filters.time === "upcoming") {
+        const now = new Date().toISOString()
+        query = query.gte('date', now)
+
+        query = query.order("status", { ascending: false })
+            .order("date", { ascending: true })
+    } else {
+        // For all appointments, sort by date descending (newest first)
+        // But for online bookings (source: booking), prioritize pending status
+        if (filters.source === "booking") {
+            // Custom sorting: pending status first, then by created_at (newest first)
+            // We'll handle this sorting manually after fetching the data
+            query = query.order("created_at", { ascending: false })
+        } else {
+            query = query.order("date", { ascending: false })
+        }
+    }
+
+    // Apply range for pagination
+    query = query.range(from, to)
+
+    // Apply date filter if provided
+    if (filters.date) {
+        // Filter appointments for the specific date
+        const startDate = new Date(filters.date)
+        startDate.setHours(0, 0, 0, 0)
+        const endDate = new Date(startDate)
+        endDate.setHours(23, 59, 59, 999)
+
+        query = query
+            .gte('date', startDate.toISOString())
+            .lte('date', endDate.toISOString())
+    }
+
+    // Apply status filter if provided
+    if (filters.status) {
+        query = query.eq('status', filters.status)
+    }
+
+    // Apply source filter if provided
+    if (filters.source) {
+        query = query.eq('from', filters.source)
+    }
+
+    // Apply search term if provided
+    if (search) {
+        const s = `%${search.trim()}%`
+        query = query.or(`patient.name.ilike.${s},patient.phone.ilike.${s}`)
+    }
+
+    const { data, error, count } = await query
+
+    if (error) throw error
+    
+    // For online bookings, manually sort to put pending first
+    let sortedData = data ?? []
+    if (filters.source === "booking" && sortedData.length > 0) {
+        sortedData = [...sortedData].sort((a, b) => {
+            // If one is pending and the other is not, pending comes first
+            if (a.status === "pending" && b.status !== "pending") return -1
+            if (b.status === "pending" && a.status !== "pending") return 1
+            // If both are pending or both are not pending, sort by created_at (newest first)
+            return new Date(b.created_at) - new Date(a.created_at)
+        })
+    }
+    
+    return { items: sortedData, total: count ?? 0 }
+}
+
+export async function createAppointmentPublic(payload, clinicId) {
+    // Convert clinicId to string for JSON serialization
+    const clinicIdString = clinicId.toString();
+
+    // Add clinic_id to the appointment data
+    const appointmentData = {
+        ...payload,
+        clinic_id: clinicIdString,
+        status: "pending",
+        from: "booking" // Indicate that this appointment was created from the booking page
+    }
+
+    const { data, error } = await supabase
+        .from("appointments")
+        .insert(appointmentData)
+        .select()
+        .single()
+
+    if (error) {
+        console.error("Error creating appointment:", error);
+        throw error
+    }
+    
+    // Debug logging to see what IDs we're getting
+    console.log("Appointment created with data:", data);
+    console.log("Payload patient:", payload.patient);
+    
+    // Validate that we have a proper ID for the appointment
+    if (!data.id) {
+        console.error("Appointment ID is missing from created appointment");
+        return data;
+    }
+    
+    // Create notification for the new appointment
+    try {
+        await createPublicNotification({
+            clinic_id: clinicIdString,
+            title: "حجز جديد",
+            message: `لديك حجز جديد من ${payload.patient?.name || 'مريض'} في ${new Date(payload.date).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' })}`,
+            type: "appointment",
+            // Pass the appointment ID - it should be a UUID
+            appointment_id: data.id
+        });
+    } catch (notificationError) {
+        console.error("Error creating notification:", notificationError);
+        // Don't throw error here as we still want to return the appointment data
+    }
+
+    return data
+}
+
+export async function createAppointment(payload) {
+    // Get current user's clinic_id
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) throw new Error("Not authenticated")
+
+    const { data: userData } = await supabase
+        .from("users")
+        .select("clinic_id")
+        .eq("user_id", session.user.id)
+        .single()
+
+    if (!userData?.clinic_id) throw new Error("User has no clinic assigned")
+
+    // get clinic subscription plan
+    const { data: subscription } = await supabase
+        .from('subscriptions')
+        .select('*, plans(limits)')
+        .eq('clinic_id', userData.clinic_id)
+        .eq('status', 'active')
+        .single()
+
+    if (!subscription) throw new Error("لا يوجد اشتراك مفعل")
+
+    const maxAppointments = subscription.plans.limits.max_appointments
+    const periodStart = subscription.current_period_start
+
+    // Check if maxPatients is -1 (unlimited), skip the count check if so
+    if (maxAppointments !== -1) {
+        // 3. احسب عدد المرضى المضافين في الشهر الحالي فقط
+        const { count } = await supabase
+            .from('appointments')
+            .select('*', { count: 'exact', head: true })
+            .eq('clinic_id', userData.clinic_id)
+            .gte('created_at', periodStart) // أهم شرط: أكبر من أو يساوي تاريخ بداية الباقة
+
+        // 4. المقارنة الحاسمة
+        if (count >= maxAppointments) {
+            throw new Error("لقد تجاوزت الحد المسموح من المواعيد لهذا الشهر. يرجى ترقية الباقة.")
+        }
+    }
+
+    // Add clinic_id to the appointment data
+    const appointmentData = {
+        ...payload,
+        clinic_id: userData.clinic_id,
+        status: payload.status || "pending", // Use provided status or default to "pending"
+        from: payload.from || "clinic" // Use provided source or default to "clinic"
+    }
+
+    const { data, error } = await supabase
+        .from("appointments")
+        .insert(appointmentData)
+        .select()
+        .single()
+
+    if (error) throw error
+    return data
+}
+
+export async function updateAppointment(id, payload) {
+    // Get current user's clinic_id for security
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) throw new Error("Not authenticated")
+
+    const { data: userData } = await supabase
+        .from("users")
+        .select("clinic_id")
+        .eq("user_id", session.user.id)
+        .single()
+
+    if (!userData?.clinic_id) throw new Error("User has no clinic assigned")
+
+    const { data, error } = await supabase
+        .from("appointments")
+        .update(payload)
+        .eq("id", id)
+        .eq("clinic_id", userData.clinic_id)
+        .select()
+        .single()
+
+    if (error) throw error
+    return data
+}
+
+export async function deleteAppointment(id) {
+    // Get current user's clinic_id for security
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) throw new Error("Not authenticated")
+
+    const { data: userData } = await supabase
+        .from("users")
+        .select("clinic_id")
+        .eq("user_id", session.user.id)
+        .single()
+
+    if (!userData?.clinic_id) throw new Error("User has no clinic assigned")
+
+    const { error } = await supabase
+        .from("appointments")
+        .delete()
+        .eq("id", id)
+        .eq("clinic_id", userData.clinic_id)
+
+    if (error) throw error
+}
+
+export async function searchPatients(searchTerm) {
+    // Get current user's clinic_id
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) throw new Error("Not authenticated")
+
+    const { data: userData } = await supabase
+        .from("users")
+        .select("clinic_id")
+        .eq("user_id", session.user.id)
+        .single()
+
+    if (!userData?.clinic_id) throw new Error("User has no clinic assigned")
+
+    const s = `%${searchTerm.trim()}%`
+    const { data, error } = await supabase
+        .from("patients")
+        .select("id, name, phone")
+        .eq("clinic_id", userData.clinic_id)
+        .or(`name.ilike.${s},phone.ilike.${s}`)
+        .limit(5)
+
+    if (error) throw error
+    return data ?? []
+}
+
+// New function for public booking - search patients by phone only
+export async function searchPatientsPublic(searchTerm, clinicId) {
+    // Only search by phone number for public booking
+    const s = `%${searchTerm.trim()}%`
+    const { data, error } = await supabase
+        .from("patients")
+        .select("id, name, phone")
+        .eq("clinic_id", clinicId)
+        .ilike("phone", s)
+        .limit(5)
+
+    if (error) {
+        console.error("Error searching patients:", error);
+        throw error
+    }
+    return data ?? []
+}
+
+// New function to get appointments for a specific patient
+export async function getAppointmentsByPatientId(patientId) {
+    // Get current user's clinic_id
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) throw new Error("Not authenticated")
+
+    const { data: userData } = await supabase
+        .from("users")
+        .select("clinic_id")
+        .eq("user_id", session.user.id)
+        .single()
+
+    if (!userData?.clinic_id) throw new Error("User has no clinic assigned")
+
+    const { data, error } = await supabase
+        .from("appointments")
+        .select(`
+      id,
+      date,
+      notes,
+      price,
+      status,
+      created_at
+    `)
+        .eq("clinic_id", userData.clinic_id)
+        .eq("patient_id", patientId)
+        // Show all appointments for the patient, sorted by date descending (newest first)
+        .order("date", { ascending: false })
+
+    if (error) throw error
+    return data ?? []
+}
+
+// New function to get a single appointment by ID
+export async function getAppointmentById(id) {
+    // Get current user's clinic_id
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) throw new Error("Not authenticated")
+
+    const { data: userData } = await supabase
+        .from("users")
+        .select("clinic_id")
+        .eq("user_id", session.user.id)
+        .single()
+
+    if (!userData?.clinic_id) throw new Error("User has no clinic assigned")
+
+    const { data, error } = await supabase
+        .from("appointments")
+        .select(`
+      id,
+      date,
+      notes,
+      price,
+      status,
+      from,
+      created_at,
+      patient:patients(id, name, phone)
+    `)
+        .eq("id", id)
+        .eq("clinic_id", userData.clinic_id)
+        .single()
+
+    if (error) throw error
+    return data
+}
+
+// New function to subscribe to real-time appointment changes
+export function subscribeToAppointments(callback, clinicId, sourceFilter = null) {
+    let query = supabase
+        .channel('appointments-changes')
+        .on(
+            'postgres_changes',
+            {
+                event: '*',
+                schema: 'public',
+                table: 'appointments',
+                filter: `clinic_id=eq.${clinicId}`
+            },
+            (payload) => {
+                // If source filter is specified, only trigger callback for matching source
+                if (!sourceFilter || payload.new.from === sourceFilter || payload.old?.from === sourceFilter) {
+                    callback(payload);
+                }
+            }
+        );
+    
+    // Subscribe to the channel
+    const subscription = query.subscribe();
+    
+    // Return unsubscribe function
+    return () => {
+        supabase.removeChannel(subscription);
+    };
+}
+

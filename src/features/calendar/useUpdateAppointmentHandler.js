@@ -1,0 +1,106 @@
+import { useCallback } from "react"
+import toast from "react-hot-toast"
+import useUpdateAppointment from "./useUpdateAppointment"
+
+/**
+ * Hook to handle appointment update with validation and error handling
+ * Encapsulates all logic for updating appointments including:
+ * - Data validation
+ * - Price validation
+ * - Toast notifications
+ * - Success/Error callbacks
+ */
+export default function useUpdateAppointmentHandler() {
+    const { mutate: updateAppointment, isPending } = useUpdateAppointment()
+
+    /**
+     * Validate appointment update data
+     * @param {Object} data - Update data
+     * @returns {string|null} Error message or null if valid
+     */
+    const validateUpdateData = useCallback((data) => {
+        // Only validate date if it's being updated
+        if (data.date !== undefined) {
+            if (!data.date) {
+                return "تاريخ ووقت الموعد مطلوب"
+            }
+            
+            // Check if date is valid
+            const date = new Date(data.date);
+            if (isNaN(date.getTime())) {
+                return "تاريخ ووقت الموعد غير صحيح"
+            }
+            
+            // Check if date is not in the past
+            const now = new Date();
+            if (date < now) {
+                return "لا يمكن اختيار تاريخ ووقت سابق"
+            }
+        }
+
+        // Only validate price if it's being updated
+        if (data.price !== undefined) {
+            if (
+                data.price === "" ||
+                isNaN(parseFloat(data.price)) ||
+                parseFloat(data.price) < 0
+            ) {
+                return "سعر الحجز مطلوب ويجب أن يكون رقمًا موجبًا"
+            }
+        }
+
+        return null
+    }, [])
+
+    /**
+     * Handle appointment update
+     * @param {string} appointmentId - Appointment ID
+     * @param {Object} data - Update data
+     * @param {Function} onSuccess - Success callback
+     * @returns {void}
+     */
+    const handleAppointmentUpdate = useCallback(
+        (appointmentId, data, onSuccess) => {
+            // Check if we're only updating status
+            const isStatusUpdate = Object.keys(data).length === 1 && data.status;
+            
+            // If it's a status update, we don't need to validate other fields
+            if (!isStatusUpdate) {
+                const validationError = validateUpdateData(data);
+                if (validationError) {
+                    toast.error(validationError);
+                    return;
+                }
+            }
+            
+            const payload = {
+                date: data.date,
+                notes: data.notes,
+                price: typeof data.price === "string" ? parseFloat(data.price) : data.price,
+                status: data.status // Add status to payload
+            };
+            
+            // Remove undefined values
+            Object.keys(payload).forEach(key => {
+                if (payload[key] === undefined) {
+                    delete payload[key];
+                }
+            });
+            
+            updateAppointment(
+                { id: appointmentId, ...payload },
+                {
+                    onSuccess: () => {
+                        onSuccess?.();
+                    },
+                }
+            );
+        },
+        [updateAppointment, validateUpdateData]
+    )
+
+    return {
+        handleAppointmentUpdate,
+        isPending,
+    }
+}

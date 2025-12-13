@@ -1,0 +1,144 @@
+@import "tailwindcss";
+
+:root {
+  --background: hsl(0 0% 100%);
+  --foreground: hsl(222.2 84% 4.9%);
+  --primary: hsl(187 85% 35%);
+  --primary-foreground: hsl(0 0% 100%);
+  --secondary: hsl(224 76% 45%);
+  --secondary-foreground: hsl(0 0% 100%);
+  --muted: hsl(210 40% 96%);
+  --muted-foreground: hsl(215 16% 47%);
+  --card: hsl(0 0% 100%);
+  --card-foreground: hsl(222.2 84% 4.9%);
+  --border: hsl(214 32% 91%);
+  --input: hsl(210 40% 96%);
+}
+
+.dark {
+  --background: hsl(222.2 84% 4.9%);
+  --foreground: hsl(0 0% 98%);
+  --primary: hsl(187 85% 47%);
+  --primary-foreground: hsl(222.2 84% 4.9%);
+  --secondary: hsl(224 76% 55%);
+  --secondary-foreground: hsl(222.2 84% 4.9%);
+  --muted: hsl(223 47% 13%);
+  --muted-foreground: hsl(215 20% 65%);
+  --card: hsl(222.2 84% 5.9%);
+  --card-foreground: hsl(0 0% 98%);
+  --border: hsl(215 28% 17%);
+  --input: hsl(215 28% 17%);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --radius: 0.75rem;
+  --font-sans: Tajawal;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  background-color: var(--color-background);
+  color: var(--color-foreground);
+  font-family: var(--font-sans), system-ui, -apple-system, Segoe UI, Roboto,
+    Ubuntu, Cantarell, Noto Sans, Arial, "Helvetica Neue", "Apple Color Emoji",
+    "Segoe UI Emoji";
+}
+
+.container {
+  width: 100%;
+  margin-right: auto;
+  margin-left: auto;
+  padding-left: 1rem;
+  padding-right: 1rem;
+}
+
+/* Responsive table styles */
+.responsive-table-container {
+  overflow-x: auto;
+  width: 100%;
+}
+
+.responsive-table {
+  min-width: 100%;
+  border-collapse: collapse;
+}
+
+.responsive-table th,
+.responsive-table td {
+  padding: 0.75rem;
+  text-align: right;
+}
+
+/* Mobile card view for tables */
+@media (max-width: 767px) {
+  .table-card-view .table-row {
+    display: block;
+    margin-bottom: 1rem;
+    padding: 1rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background-color: var(--card);
+  }
+  
+  .table-card-view .table-cell {
+    display: block;
+    padding: 0.25rem 0;
+  }
+  
+  .table-card-view .table-cell::before {
+    content: attr(data-label) ": ";
+    font-weight: bold;
+    display: inline-block;
+    width: 100px;
+    margin-left: 0.5rem;
+  }
+}
+
+@media (min-width: 640px) {
+  .container {
+    max-width: 640px;
+  }
+}
+@media (min-width: 768px) {
+  .container {
+    max-width: 768px;
+  }
+}
+@media (min-width: 1024px) {
+  .container {
+    max-width: 1024px;
+  }
+}
+@media (min-width: 1280px) {
+  .container {
+    max-width: 1280px;
+  }
+}
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-slideDown {
+  animation: slideDown 0.3s ease-out;
+}

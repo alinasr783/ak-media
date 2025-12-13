@@ -1,0 +1,138 @@
+import supabase from "./supabase"
+
+export async function createFinancialRecord(payload) {
+    // Get current user's clinic_id
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) throw new Error("Not authenticated")
+
+    const { data: userData } = await supabase
+        .from("users")
+        .select("clinic_id")
+        .eq("user_id", session.user.id)
+        .single()
+
+    if (!userData?.clinic_id) throw new Error("User has no clinic assigned")
+
+    // Add clinic_id to the financial record data
+    const financialRecordData = {
+        ...payload,
+        clinic_id: userData.clinic_id
+    }
+
+    const { data, error } = await supabase
+        .from("financial_records")
+        .insert(financialRecordData)
+        .select()
+        .single()
+
+    if (error) throw error
+    return data
+}
+
+export async function getFinancialRecords(page = 1, pageSize = 10, filters = {}) {
+    // Get current user's clinic_id
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) throw new Error("Not authenticated")
+
+    const { data: userData } = await supabase
+        .from("users")
+        .select("clinic_id")
+        .eq("user_id", session.user.id)
+        .single()
+
+    if (!userData?.clinic_id) throw new Error("User has no clinic assigned")
+
+    const from = Math.max(0, (page - 1) * pageSize)
+    const to = from + pageSize - 1
+
+    let query = supabase
+        .from("financial_records")
+        .select(`
+      id,
+      appointment_id,
+      patient_plan_id,
+      patient_id,
+      amount,
+      type,
+      description,
+      recorded_at,
+      created_at,
+      patient:patients(name)
+    `, { count: "exact" })
+        .eq("clinic_id", userData.clinic_id)
+        .order("recorded_at", { ascending: false })
+
+    // Apply date filter if provided
+    if (filters.startDate && filters.endDate) {
+        query = query
+            .gte('recorded_at', filters.startDate)
+            .lte('recorded_at', filters.endDate)
+    }
+
+    // Apply type filter if provided
+    if (filters.type) {
+        query = query.eq('type', filters.type)
+    }
+
+    // Apply range for pagination
+    query = query.range(from, to)
+
+    const { data, error, count } = await query
+
+    if (error) throw error
+    return { items: data ?? [], total: count ?? 0 }
+}
+
+export async function getFinancialSummary(filters = {}) {
+    // Get current user's clinic_id
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) throw new Error("Not authenticated")
+
+    const { data: userData } = await supabase
+        .from("users")
+        .select("clinic_id")
+        .eq("user_id", session.user.id)
+        .single()
+
+    if (!userData?.clinic_id) throw new Error("User has no clinic assigned")
+
+    // Get income summary
+    let incomeQuery = supabase
+        .from("financial_records")
+        .select("sum(amount)")
+        .eq("clinic_id", userData.clinic_id)
+        .eq("type", "income")
+
+    // Apply date filter if provided
+    if (filters.startDate && filters.endDate) {
+        incomeQuery = incomeQuery
+            .gte('recorded_at', filters.startDate)
+            .lte('recorded_at', filters.endDate)
+    }
+
+    const { data: incomeData, error: incomeError } = await incomeQuery.single()
+    if (incomeError) throw incomeError
+
+    // Get expense summary
+    let expenseQuery = supabase
+        .from("financial_records")
+        .select("sum(amount)")
+        .eq("clinic_id", userData.clinic_id)
+        .eq("type", "expense")
+
+    // Apply date filter if provided
+    if (filters.startDate && filters.endDate) {
+        expenseQuery = expenseQuery
+            .gte('recorded_at', filters.startDate)
+            .lte('recorded_at', filters.endDate)
+    }
+
+    const { data: expenseData, error: expenseError } = await expenseQuery.single()
+    if (expenseError) throw expenseError
+
+    return {
+        totalIncome: incomeData.sum || 0,
+        totalExpense: expenseData.sum || 0,
+        netProfit: (incomeData.sum || 0) - (expenseData.sum || 0)
+    }
+}
