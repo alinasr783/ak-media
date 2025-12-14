@@ -74,7 +74,7 @@ export default function CTA() {
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
                   >
-                    ابدأ التجربة المجانية
+                    اعمل حسابك
                     <ArrowRight className="w-5 h-5" />
                   </motion.button>
                 </Link>
@@ -93,7 +93,7 @@ export default function CTA() {
                 </Link>
               </motion.div>
             </motion.div>
-            
+             
             <motion.div 
               variants={container}
               className="pt-8 flex flex-wrap justify-center items-center gap-6 text-sm"

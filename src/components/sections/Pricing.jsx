@@ -3,7 +3,6 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import usePricingPlans from "../../features/settings/usePricingPlans";
-import { useCreateSubscription } from "../../features/auth/useSubscription";
 import { useAuth } from "../../features/auth/AuthContext";
 import { formatCurrency } from "../../lib/utils";
 import { Badge } from "../ui/badge";
@@ -18,7 +17,6 @@ export default function Pricing() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const {data: plans = [], isLoading, error} = usePricingPlans();
-  const { mutate: createSubscription, isPending } = useCreateSubscription();
   const [showAnnual, setShowAnnual] = useState(false);
   
   // Get usage statistics for the current user
@@ -149,14 +147,8 @@ export default function Pricing() {
   }
 
   const handleSelectPlan = (plan) => {
-    // Create subscription immediately
-    createSubscription({
-      clinicId: user?.clinic_id,
-      planId: plan.id,
-      planName: plan.name,
-      billingPeriod: showAnnual ? 'annual' : 'monthly',
-      amount: showAnnual ? plan.price * 10 : plan.price
-    });
+    // Redirect to subscriptions page instead of creating subscription immediately
+    navigate('/subscriptions');
   };
 
   // Progress bar component for usage statistics
@@ -200,6 +192,18 @@ export default function Pricing() {
           <h2 className="text-3xl font-bold">خطط تسعير مرنة</h2>
           <p className="text-muted-foreground">
             اختر الخطة المناسبة لعيادتك وابدأ خلال دقائق.
+          </p>
+        </motion.div>
+
+        {/* Payment Gateway Integration Notice */}
+        <motion.div 
+          variants={item}
+          className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg text-center"
+        >
+          <p className="text-blue-800">
+            <strong>ملاحظة:</strong> جارٍ التكامل مع بوابات الدفع. إذا كنت ترغب في الاشتراك الآن، 
+            يرجى <a href="https://wa.me/201158954215" target="_blank" rel="noopener noreferrer" className="underline hover:text-blue-600">التواصل مع فريق المبيعات</a> 
+            وسوف يقوم فريقنا بتفعيل الاشتراك لك.
           </p>
         </motion.div>
 
@@ -378,11 +382,10 @@ export default function Pricing() {
                             ? "bg-primary text-primary-foreground shadow hover:bg-primary/90 h-10 px-4 py-2" 
                             : "border border-border bg-transparent text-foreground hover:bg-muted h-10 px-4 py-2"
                         }`}
-                        disabled={isPending}
                         whileHover={{ scale: 1.05 }}
                         whileTap={{ scale: 0.95 }}
                       >
-                        {isPending ? "جاري التفعيل..." : "اختر الباقة"}
+                        اختر الباقة
                       </motion.button>
                     </CardFooter>
                   </Card>

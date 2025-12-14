@@ -191,6 +191,22 @@ export default function PlanConfirmation() {
           </Button>
         </div>
 
+        {/* Payment Gateway Integration Notice */}
+        <div className="mb-8 p-4 bg-blue-50 border border-blue-200 rounded-lg text-center">
+          <p className="text-blue-800">
+            <strong>ملاحظة:</strong> جارٍ التكامل مع بوابات الدفع. إذا كنت ترغب في الاشتراك الآن، 
+            يرجى <a 
+              href={`https://wa.me/201158954215?text=${encodeURIComponent(`أود الاشتراك في خطة "${plan?.name}" لفترة ${billingPeriod === 'annual' ? 'سنوية' : 'شهرية'} - السعر النهائي: ${formatCurrency(finalPrice)}`)}`} 
+              target="_blank" 
+              rel="noopener noreferrer" 
+              className="underline hover:text-blue-600"
+            >
+              التواصل مع فريق المبيعات
+            </a> 
+            وسوف يقوم فريقنا بتفعيل الاشتراك لك.
+          </p>
+        </div>
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Left Column - Plan Details */}
           <div className="lg:col-span-2 space-y-6">
@@ -417,6 +433,40 @@ export default function PlanConfirmation() {
                 </div>
 
                 {/* Payment Method Selection - Hidden as requested */}
+
+                {/* Payment Buttons */}
+                <div className="space-y-3">
+                  <Button
+                    onClick={() => handleConfirmSubscription('card')}
+                    className="w-full bg-primary hover:bg-primary/90 text-white py-3"
+                    disabled={isSubmitting}
+                  >
+                    {isSubmitting ? (
+                      <>
+                        <Clock className="w-4 h-4 ml-2 animate-spin" />
+                        جاري المعالجة...
+                      </>
+                    ) : (
+                      <>
+                        <CreditCard className="w-4 h-4 ml-2" />
+                        تأكيد الاشتراك
+                      </>
+                    )}
+                  </Button>
+                  
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      // Open WhatsApp with plan details
+                      const whatsappMessage = `أود الاشتراك في خطة "${plan?.name}" لفترة ${billingPeriod === 'annual' ? 'سنوية' : 'شهرية'} - السعر النهائي: ${formatCurrency(finalPrice)}`;
+                      window.open(`https://wa.me/201158954215?text=${encodeURIComponent(whatsappMessage)}`, '_blank');
+                    }}
+                    className="w-full border-gray-300 hover:bg-gray-50 py-3"
+                  >
+                    <Smartphone className="w-4 h-4 ml-2" />
+                    التواصل مع المبيعات عبر واتساب
+                  </Button>
+                </div>
 
                 {/* Important Notes */}
                 <div className="bg-yellow-50 rounded-xl p-4 border border-yellow-200">
