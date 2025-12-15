@@ -14,7 +14,7 @@ export default function Login() {
         <Button
           variant="ghost"
           size="icon"
-          onClick={() => navigate(-1)}
+          onClick={() => navigate("/")} // Changed from navigate(-1) to navigate("/") to go to landing page
           className="absolute top-4 left-4 hover:bg-primary/10"
         >
           <ArrowLeft className="size-5" />
