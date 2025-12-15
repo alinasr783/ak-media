@@ -74,10 +74,10 @@ export default function CTA() {
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
                   >
-                    اعمل حسابك
+                    اعمل حسابك دلوقتي 
                     <ArrowRight className="w-5 h-5" />
                   </motion.button>
-                </Link>
+                </Link> 
               </motion.div>
               
               <motion.div variants={item}>
@@ -100,7 +100,7 @@ export default function CTA() {
             >
               <motion.div variants={item} className="flex items-center gap-2">
                 <Star className="w-5 h-5 fill-current" />
-                <span>تجربة مجانية لمدة 14 يوم</span>
+                <span>رجع فلوسك خلال 14 يوم</span>
               </motion.div>
               <motion.div variants={item} className="flex items-center gap-2">
                 <Star className="w-5 h-5 fill-current" />
