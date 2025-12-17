@@ -180,6 +180,7 @@ export default function DoctorLayout() {
             isVisible={hasPatientsAccess}
             onClick={handleNavItemClick}
           />
+          
           <NavItem
             to="/clinic"
             icon={Building}
