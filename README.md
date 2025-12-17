@@ -1,68 +1,87 @@
 # Tabibi Medical Clinic Management System
 
-A comprehensive web-based solution for managing medical clinics, featuring patient records, appointment scheduling, treatment plans, and financial tracking.
+A comprehensive medical clinic management system built with React and Supabase.
 
 ## Features
 
-- **Patient Management**: Store and manage patient information, medical history, and visit records
-- **Appointment Scheduling**: Calendar-based appointment system with reminders
-- **Treatment Plans**: Create and track personalized treatment plans for patients
-- **Financial Tracking**: Manage payments, billing, and financial reports
-- **Online Booking**: Allow patients to book appointments online
-- **Notifications**: Real-time notifications for appointments, payments, and clinic updates
-- **Multi-user Support**: Role-based access control for doctors and secretaries
-- **Subscription Management**: Tiered pricing plans with usage limits
-- **Offline Mode**: Continue working even without internet connectivity
+- Patient management
+- Appointment scheduling
+- Treatment plans
+- Financial tracking
+- Online booking
+- Subscription management
+- Offline mode support
 
-## Offline Mode
+## Prerequisites
 
-The Tabibi platform includes a robust offline mode that allows users to continue working normally even when the internet connection is lost. All changes are saved locally and automatically synchronized with the server when connectivity is restored.
+- Node.js (version 16 or higher)
+- npm or yarn
+- Supabase account
 
-### How Offline Mode Works
+## Installation
 
-1. **Automatic Detection**: The system automatically detects when internet connectivity is lost
-2. **Local Storage**: All operations are saved to a local IndexedDB database
-3. **Queue Management**: Operations are queued for synchronization when connectivity is restored
-4. **Automatic Sync**: When internet connectivity is restored, queued operations are automatically synchronized
-5. **Conflict Resolution**: Uses a last-write-wins strategy for conflict resolution
+1. Clone the repository:
+   ```bash
+   git clone <repository-url>
+   ```
 
-### Supported Offline Features
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
 
-- Patient creation, editing, and deletion
-- Appointment creation, editing, and deletion
-- Treatment plan creation, editing, and deletion
-- Viewing existing data (patients, appointments, etc.)
+3. Set up environment variables:
+   Create a `.env` file in the root directory with your Supabase credentials:
+   ```
+   VITE_SUPABASE_URL=your_supabase_url
+   VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+   ```
 
-### Limitations in Offline Mode
+## Development
 
-- Features requiring real-time data (payments, online booking submissions) are disabled
-- New user registrations are not available
-- Some reporting features may show outdated data
+To start the development server:
+```bash
+npm run dev
+```
 
-## Tech Stack
+## Build
 
-- **Frontend**: React, Vite, TailwindCSS
-- **Backend**: Supabase (Database, Authentication, Realtime)
-- **State Management**: React Query
-- **UI Components**: Radix UI, Lucide Icons
-- **Forms**: React Hook Form
-- **Routing**: React Router
-- **Offline Support**: IndexedDB, Service Workers
-
-## Getting Started
-
-1. Clone the repository
-2. Install dependencies: `npm install`
-3. Set up environment variables (see `.env.example`)
-4. Run the development server: `npm run dev`
+To create a production build:
+```bash
+npm run build
+```
 
 ## Deployment
 
-The application can be deployed to any static hosting service. For Supabase integration, ensure environment variables are properly configured.
+This project can be deployed to Vercel, Netlify, or any static hosting service.
+
+### Vercel Deployment
+
+1. Push your code to GitHub
+2. Connect your repository to Vercel
+3. Configure the environment variables in Vercel dashboard
+4. Deploy!
+
+## Project Structure
+
+```
+src/
+├── components/        # Reusable UI components
+├── features/          # Feature-specific components and logic
+├── pages/             # Page components
+├── services/          # API services and Supabase integration
+├── hooks/             # Custom React hooks
+├── lib/               # Utility functions and helpers
+└── constants/         # Application constants
+```
 
 ## Contributing
 
-Contributions are welcome! Please read our contributing guidelines before submitting pull requests.
+1. Fork the repository
+2. Create a feature branch
+3. Commit your changes
+4. Push to the branch
+5. Create a pull request
 
 ## License
 
