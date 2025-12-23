@@ -37,31 +37,36 @@ export default function PlanConfirmation() {
   const { mutate: createSubscription, isPending: isCreating } = useCreateSubscription()
   
   const [billingPeriod, setBillingPeriod] = useState('monthly')
-  const discount = useDiscountCode(plan?.price || 0, planId)
+  const discount = useDiscountCode(plan?.price || 0, planId, billingPeriod)
   
   const isLoading = isPlanLoading
   const isSubmitting = isCreating
 
   // Calculate pricing with discount
-  const pricing = {
-    basePrice: plan?.price || 0,
-    finalPrice: discount.finalAmount || plan?.price || 0,
-    savings: 0,
-    duration: 1,
-    monthlyEquivalent: plan?.price || 0
+  const monthlyPrice = plan?.price || 0
+  const isAnnual = billingPeriod === 'annual'
+  
+  // Base price before any discounts
+  const basePrice = isAnnual ? monthlyPrice * 10 : monthlyPrice
+  
+  // Calculate discount amount based on billing period
+  let discountAmount = discount.discountAmount
+  if (isAnnual && discount.discountAmount > 0) {
+    // For annual billing, apply the discount to the annual price
+    // If monthly discount is X, annual discount should be X * 10
+    discountAmount = discount.discountAmount * 10
   }
-
-  // Apply annual discount if selected
-  if (billingPeriod === 'annual' && plan) {
-    const monthlyPrice = plan.price
-    const annualPrice = monthlyPrice * 10
-    const savings = monthlyPrice * 2
-    
-    pricing.basePrice = annualPrice
-    pricing.finalPrice = discount.finalAmount ? (discount.finalAmount * 10) : annualPrice
-    pricing.savings = savings
-    pricing.duration = 12
-    pricing.monthlyEquivalent = annualPrice / 12
+  
+  // Calculate final price after discount
+  const finalPriceAfterDiscount = Math.max(0, basePrice - discountAmount)
+  
+  const pricing = {
+    basePrice: basePrice,
+    finalPrice: finalPriceAfterDiscount,
+    savings: isAnnual ? monthlyPrice * 2 : 0,
+    duration: isAnnual ? 12 : 1,
+    monthlyEquivalent: isAnnual ? basePrice / 12 : monthlyPrice,
+    discountAmount: discountAmount
   }
 
   const finalPrice = pricing.finalPrice
@@ -78,7 +83,39 @@ export default function PlanConfirmation() {
       return
     }
 
-    // Create subscription
+    // Only activate subscription if final price is 0 or less (100% discount or free)
+    if (finalPrice <= 0) {
+      // Create subscription for free/100% discount
+      createSubscription({
+        clinicId: user.clinic_id,
+        planId: plan.id,
+        billingPeriod,
+        amount: 0,
+        paymentMethod: 'free'
+      }, {
+        onSuccess: () => {
+          // Increment discount usage after successful subscription
+          if (discount.appliedDiscount) {
+            discount.confirmDiscountUsage();
+          }
+        }
+      })
+    } else {
+      // For paid subscriptions, save discount ID for later use after payment
+      if (discount.appliedDiscount?.id) {
+        localStorage.setItem('pending_discount_id', discount.appliedDiscount.id.toString());
+      }
+      
+      // Show message to contact sales
+      toast.error("لتفعيل الاشتراك، يرجى التواصل مع فريق المبيعات عبر واتساب")
+      
+      // Optionally open WhatsApp automatically
+      const whatsappMessage = `أود الاشتراك في خطة "${plan?.name}" لفترة ${billingPeriod === 'annual' ? 'سنوية' : 'شهرية'} - السعر النهائي: ${formatCurrency(finalPrice)}`;
+      window.open(`https://wa.me/201158954215?text=${encodeURIComponent(whatsappMessage)}`, '_blank');
+    }
+
+    /* COMMENTED OUT - Subscription activation now requires payment or 100% discount
+    // Old code that activated subscription immediately:
     createSubscription({
       clinicId: user.clinic_id,
       planId: plan.id,
@@ -87,12 +124,12 @@ export default function PlanConfirmation() {
       paymentMethod
     }, {
       onSuccess: () => {
-        // Increment discount usage after successful subscription
         if (discount.appliedDiscount) {
           discount.confirmDiscountUsage();
         }
       }
     })
+    */
   }
 
   const getButtonText = (planName) => {
@@ -416,11 +453,11 @@ export default function PlanConfirmation() {
                     </div>
                   )}
                   
-                  {discount.discountAmount > 0 && (
+                  {pricing.discountAmount > 0 && (
                     <div className="flex justify-between items-center py-2">
                       <span className="text-gray-600">كود الخصم</span>
                       <span className="font-semibold text-green-600">
-                        -{formatCurrency(discount.discountAmount * (billingPeriod === 'annual' ? 10 : 1))}
+                        -{formatCurrency(pricing.discountAmount)}
                       </span>
                     </div>
                   )}

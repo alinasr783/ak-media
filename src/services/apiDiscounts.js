@@ -4,12 +4,13 @@ import supabase from "./supabase";
  * Search for a discount code in the discounts table
  * @param {string} code - The discount code to search for
  * @param {string} planId - The plan ID to check against (optional)
+ * @param {string} billingPeriod - The billing period (monthly/annual) to check against (optional)
  * @returns {Promise<Object|null>} - Discount object or null if not found
  */
-export async function getDiscountByCode(code, planId = null) {
+export async function getDiscountByCode(code, planId = null, billingPeriod = null) {
     const { data, error } = await supabase
         .from("discounts")
-        .select("id, code, value, is_percentage, is_active, plan_id, max_uses, used_count, expiration_date, message, min_amount, clinic_id")
+        .select("id, code, value, is_percentage, is_active, plan_id, max_uses, used_count, expiration_date, message, billing_period")
         .eq("code", code.trim().toUpperCase())
         .eq("is_active", true)
         .maybeSingle();
@@ -27,9 +28,10 @@ export async function getDiscountByCode(code, planId = null) {
  * @param {Object} discount - Discount object from DB
  * @param {number} originalAmount - Original price amount
  * @param {string} planId - Current subscription plan ID
+ * @param {string} billingPeriod - Current billing period (monthly/annual)
  * @returns {Object} - { isValid, discountAmount, finalAmount, message, discount }
  */
-export function calculateDiscount(discount, originalAmount, planId = null) {
+export function calculateDiscount(discount, originalAmount, planId = null, billingPeriod = null) {
     if (!discount) {
         return {
             isValid: false,
@@ -83,13 +85,14 @@ export function calculateDiscount(discount, originalAmount, planId = null) {
         };
     }
 
-    // Check minimum amount
-    if (discount.min_amount && originalAmount < discount.min_amount) {
+    // Check if discount is limited to specific billing period
+    if (discount.billing_period && billingPeriod && discount.billing_period !== 'both' && discount.billing_period !== billingPeriod) {
+        const periodName = billingPeriod === 'monthly' ? 'الشهري' : 'السنوي';
         return {
             isValid: false,
             discountAmount: 0,
             finalAmount: originalAmount,
-            message: `الحد الأدنى للطلب ${discount.min_amount} جنيه`,
+            message: `هذا الكود غير متاح للاشتراك ${periodName}`,
         };
     }
 
@@ -120,12 +123,25 @@ export function calculateDiscount(discount, originalAmount, planId = null) {
  * @returns {Promise<void>}
  */
 export async function incrementDiscountUsage(discountId) {
-    const { error } = await supabase.rpc('increment_discount_usage', {
-        discount_id: discountId
-    });
+    // First get current count
+    const { data: currentDiscount, error: fetchError } = await supabase
+        .from('discounts')
+        .select('used_count')
+        .eq('id', discountId)
+        .single();
 
-    if (error) {
-        console.error("Error incrementing discount usage:", error);
-        // Don't throw error to avoid blocking the payment
+    if (fetchError) {
+        console.error('Error fetching discount:', fetchError);
+        return;
+    }
+
+    // Increment the count
+    const { error: updateError } = await supabase
+        .from('discounts')
+        .update({ used_count: (currentDiscount.used_count || 0) + 1 })
+        .eq('id', discountId);
+
+    if (updateError) {
+        console.error('Error incrementing discount usage:', updateError);
     }
 }

@@ -6,9 +6,10 @@ import { getDiscountByCode, calculateDiscount, incrementDiscountUsage } from "..
  * Custom hook to manage discount code logic
  * @param {number} originalAmount - Original price amount
  * @param {string} planId - Current subscription plan ID (optional)
+ * @param {string} billingPeriod - Current billing period (monthly/annual) (optional)
  * @returns {Object} - { code, appliedDiscount, discountAmount, finalAmount, message, error, isPending, applyDiscount, clearDiscount }
  */
-export default function useDiscountCode(originalAmount = 0, planId = null) {
+export default function useDiscountCode(originalAmount = 0, planId = null, billingPeriod = null) {
     const [code, setCode] = useState("");
     const [appliedDiscount, setAppliedDiscount] = useState(null);
     const [discountAmount, setDiscountAmount] = useState(0);
@@ -34,11 +35,11 @@ export default function useDiscountCode(originalAmount = 0, planId = null) {
                 throw new Error("يرجى إدخال كود الخصم");
             }
 
-            const discount = await getDiscountByCode(trimmedCode, planId);
+            const discount = await getDiscountByCode(trimmedCode, planId, billingPeriod);
             return discount;
         },
         onSuccess: (discount) => {
-            const result = calculateDiscount(discount, originalAmount, planId);
+            const result = calculateDiscount(discount, originalAmount, planId, billingPeriod);
 
             if (result.isValid) {
                 setAppliedDiscount(result.discount);

@@ -48,6 +48,7 @@ export default function SummaryCards({ filter, setFilter }) {
     useLastMonthBookings();
 
   // Check if income feature is enabled in the plan
+  // By default, show income for all plans (set to true)
   const isIncomeEnabled = planData?.plans?.limits?.features?.income !== false;
 
   const filterLabels = {
@@ -58,12 +59,27 @@ export default function SummaryCards({ filter, setFilter }) {
 
   return (
     <div className="space-y-4">
+      {/* Filter Selector */}
+      <div className="flex items-center justify-between gap-4">
+        <h3 className="text-sm font-medium text-muted-foreground">احصائيات العيادة</h3>
+        <Select value={filter} onValueChange={setFilter}>
+          <SelectTrigger className="w-[140px] h-9">
+            <SelectValue placeholder="اختر الفترة" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="week">آخر أسبوع</SelectItem>
+            <SelectItem value="month">آخر شهر</SelectItem>
+            <SelectItem value="threeMonths">آخر 3 أشهر</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
       {/* Stats Cards - Always shown except when specifically hidden */}
       <div
         className={`grid gap-3 ${
           isIncomeEnabled
-            ? "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5"
-            : "grid-cols-2 sm:grid-cols-4 lg:grid-cols-4 xl:grid-cols-4"
+            ? "grid-cols-2 lg:grid-cols-5"
+            : "grid-cols-2 lg:grid-cols-4"
         }`}>
         <Stat
           icon={CalendarDays}
@@ -100,7 +116,7 @@ export default function SummaryCards({ filter, setFilter }) {
         />
         <Stat
           icon={CalendarDays}
-          label="لحجوزات الإلكترونية "
+          label="الحجوزات الإلكترونية"
           value={lastMonthBookings || 0}
           isLoading={isLoading || isLastMonthBookingsLoading}
           onClick={() => navigate('/online-booking')}

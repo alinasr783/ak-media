@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card.
 import { Button } from '../components/ui/button.jsx';
 import { useAuth } from '@/features/auth/AuthContext';
 import { createSubscription } from '@/services/apiSubscriptions';
+import { incrementDiscountUsage } from '@/services/apiDiscounts';
 import toast from 'react-hot-toast';
 import { 
   Loader, 
@@ -56,10 +57,13 @@ export default function PaymentCallback() {
         
         if (verification.isValid && verification.status === 'success') {
           // Payment was successful, create the subscription
+          // NOTE: This is a payment callback - subscription is only created after successful payment
+          // This is different from direct subscription activation without payment
           const clinicId = user?.clinic_id;
           const planId = localStorage.getItem('pending_subscription_plan_id');
           const billingPeriod = localStorage.getItem('pending_subscription_billing_period');
           const amount = localStorage.getItem('pending_subscription_amount');
+          const discountId = localStorage.getItem('pending_discount_id');
           
           if (clinicId && planId) {
             await createSubscription({
@@ -69,15 +73,21 @@ export default function PaymentCallback() {
               amount: parseFloat(amount) || 0
             });
             
+            // Increment discount usage if a discount was applied
+            if (discountId) {
+              await incrementDiscountUsage(parseInt(discountId));
+            }
+            
             setStatus('success');
             setPaymentData(verification);
-            toast.success("🎉 تم تفعيل الاشتراك بنجاح!");
+            toast.success("تم تفعيل الاشتراك بنجاح!");
             
             // Clear pending subscription data
             localStorage.removeItem('pending_subscription_plan_id');
             localStorage.removeItem('pending_subscription_billing_period');
             localStorage.removeItem('pending_subscription_amount');
             localStorage.removeItem('pending_payment_method');
+            localStorage.removeItem('pending_discount_id');
           } else {
             throw new Error('بيانات الاشتراك غير مكتملة');
           }

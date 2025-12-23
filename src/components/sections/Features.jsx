@@ -22,15 +22,15 @@ export default function Features() {
     <section id="features" className="container py-16">
       <div className="text-center space-y-3 mb-8">
         <h2 className="text-3xl font-bold">مميزات قوية</h2>
-        <p className="text-muted-foreground">أدوات مرنة تغطي دورة حياة الزيارة بالكامل.</p>
+        <p className="text-muted-foreground">أدوات متكاملة لعيادتك</p>
       </div>
       <div className="grid md:grid-cols-3 gap-6">
-        <FeatureCard icon={CalendarDays} title="جدولة مواعيد ذكية" desc="لوحة مواعيد تفاعلية لإدارة الحجز والاستقبال بسرعة ودقة." />
-        <FeatureCard icon={FileText} title="ملف طبي إلكتروني EMR" desc="حفظ التاريخ المرضي والمرفقات والملاحظات لكل مريض بشكل منظم." />
-        <FeatureCard icon={Receipt} title="فواتير وإيرادات" desc="إدارة الفواتير وتتبع الإيرادات مع تقارير مالية واضحة." />
-        <FeatureCard icon={ShieldCheck} title="أمان وخصوصية" desc="تشفير وحماية بيانات المرضى وفق أعلى المعايير." />
-        <FeatureCard icon={Stethoscope} title="روشتة PDF عبر واتساب" desc="توليد روشتة تلقائياً وطباعتها مع امكانية ارسال محتوياتها للمريض عبر واتساب." />
-        <FeatureCard icon={Smartphone} title="واجهة تدعم الجوال" desc="تصميم متجاوب يعمل بسلاسة على الهواتف." />
+        <FeatureCard icon={CalendarDays} title="حجز إلكتروني" desc="لينك حجز جاهز للإعلانات" />
+        <FeatureCard icon={FileText} title="تنظيم المواعيد" desc="إدارة سهلة لكل الحجوزات" />
+        <FeatureCard icon={Receipt} title="متابعة المرضى" desc="تقارير واضحة للحملات" />
+        <FeatureCard icon={ShieldCheck} title="أمان وخصوصية" desc="حماية بيانات المرضى" />
+        <FeatureCard icon={Stethoscope} title="تقارير مفصلة" desc="إحصائيات الحجوزات والإيرادات" />
+        <FeatureCard icon={Smartphone} title="يعمل على الجوال" desc="تصميم متجاوب للهواتف" />
       </div>
     </section>
   )

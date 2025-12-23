@@ -52,14 +52,14 @@ export default function CTA() {
               variants={item}
               className="text-3xl md:text-4xl font-bold"
             >
-              جاهز تبدأ رحلة تبسيط عيادتك؟
+              جاهز تفعّل Tabibi؟
             </motion.h2>
             
             <motion.p 
               variants={item}
               className="text-lg opacity-90"
             >
-              انضم لأكثر من 120 عيادة طبية بتستخدم تابيبي عشان تحسن كفاءة العمل وتوفر وقت ومال
+              انضم لـ 120+ عيادة بتستخدم Tabibi
             </motion.p>
             
             <motion.div 
@@ -74,7 +74,7 @@ export default function CTA() {
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
                   >
-                    اعمل حسابك دلوقتي 
+                    فعّل Tabibi دلوقتي
                     <ArrowRight className="w-5 h-5" />
                   </motion.button>
                 </Link> 

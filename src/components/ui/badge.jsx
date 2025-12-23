@@ -6,6 +6,8 @@ export function Badge({ className, children, variant = "default", ...props }) {
       ? "bg-primary text-primary-foreground"
       : variant === "secondary"
       ? "bg-secondary text-secondary-foreground"
+      : variant === "destructive"
+      ? "bg-red-500 text-white"
       : variant === "outline"
       ? "border border-border"
       : "bg-muted text-foreground"

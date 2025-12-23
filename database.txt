@@ -58,8 +58,7 @@ CREATE TABLE public.discounts (
   used_count integer DEFAULT 0,
   expiration_date timestamp with time zone,
   message text,
-  clinic_id uuid,
-  min_amount numeric DEFAULT 0,
+  billing_period text DEFAULT 'both' CHECK (billing_period IN ('monthly', 'annual', 'both')),
   CONSTRAINT discounts_pkey PRIMARY KEY (id),
   CONSTRAINT discounts_plan_id_fkey FOREIGN KEY (plan_id) REFERENCES public.plans(id)
 );

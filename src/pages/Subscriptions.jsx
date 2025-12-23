@@ -235,13 +235,13 @@ export default function Subscriptions() {
       <div className="container mx-auto">
         {/* Header */}
         <div className="mb-8">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="p-2 rounded-lg bg-primary/10 text-primary">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="p-2.5 rounded-xl bg-primary/10 text-primary">
               <CreditCard className="w-6 h-6" />
             </div>
             <h1 className="text-3xl font-bold text-foreground">إدارة الاشتراك</h1>
           </div>
-          <p className="text-muted-foreground">شوف تفاصيل باقتك واستكشف الخطط التانية</p>
+          <p className="text-muted-foreground mr-14">شوف تفاصيل باقتك واستكشف الخطط التانية</p>
         </div>
 
         {isLoading ? (
@@ -286,15 +286,17 @@ export default function Subscriptions() {
             <section className="mb-12">
               <Card className="rounded-2xl bg-card/70">
                 <CardHeader className="pb-4 border-b border-border">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div>
-                      <CardTitle className="text-xl font-bold text-foreground flex items-center gap-3">
+                  <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3 mb-2">
                         <div className="bg-primary/10 p-2 rounded-lg">
                           <CreditCard className="w-5 h-5 text-primary" />
                         </div>
-                        {hasNoSubscription ? "مفيش اشتراك فعال" : "باقتك دلوقتي"}
-                      </CardTitle>
-                      <p className="text-muted-foreground mt-1">
+                        <CardTitle className="text-xl font-bold text-foreground">
+                          {hasNoSubscription ? "مفيش اشتراك فعال" : "باقتك دلوقتي"}
+                        </CardTitle>
+                      </div>
+                      <p className="text-muted-foreground mr-11">
                         {hasNoSubscription 
                           ? "لازم تشترك عشان تستخدم كل المميزات" 
                           : (isFreePlan ? "باقة مجانية" : currentPlan?.name || "غير محدد")}
@@ -302,7 +304,7 @@ export default function Subscriptions() {
                     </div>
                     
                     {!hasNoSubscription && !isFreePlan && (
-                      <Badge variant="default" className="text-sm">
+                      <Badge variant="default" className="px-3 py-1 text-xs font-medium w-fit">
                         نشط
                       </Badge>
                     )}
@@ -346,7 +348,7 @@ export default function Subscriptions() {
                           </div>
                           
                           {currentPlan?.popular && (
-                            <Badge className="bg-yellow-500 hover:bg-yellow-600">
+                            <Badge className="bg-yellow-500 hover:bg-yellow-600 text-white px-2.5 py-0.5 text-xs font-medium">
                               الأكثر شعبية
                             </Badge>
                           )}
@@ -396,7 +398,7 @@ export default function Subscriptions() {
                             {daysRemaining !== null && (
                               <Badge 
                                 variant={daysRemaining <= 7 ? "destructive" : "secondary"}
-                                className="text-xs"
+                                className="px-2.5 py-0.5 text-xs font-medium"
                               >
                                 {daysRemaining} {daysRemaining === 1 ? "يوم" : "أيام"} متبقية
                               </Badge>
@@ -532,7 +534,7 @@ export default function Subscriptions() {
                               {plan.name}
                             </CardTitle>
                             {isCurrentPlan && (
-                              <Badge variant="default">الحالي</Badge>
+                              <Badge variant="default" className="px-2.5 py-0.5 text-xs font-medium">الحالي</Badge>
                             )}
                           </div>
                           <div className="mt-2">
