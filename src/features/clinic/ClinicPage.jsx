@@ -4,7 +4,6 @@ import { Card } from "../../components/ui/card"
 import { useAuth } from "../auth/AuthContext"
 import useClinic from "../auth/useClinic"
 import useClinicSecretaries from "./useClinicSecretaries"
-import useUpdateSecretaryPermissions from "./useUpdateSecretaryPermissions"
 import useUpdateClinic from "./useUpdateClinic"
 import ClinicInfoForm from "./ClinicInfoForm"
 import SecretsSection from "./SecretsSection"
@@ -35,7 +34,6 @@ export default function ClinicPage() {
     isError: isSecretariesError,
   } = useClinicSecretaries(user?.clinic_id)
 
-  const { mutate: updatePermissions } = useUpdateSecretaryPermissions()
   const { mutate: updateClinic, isPending: isUpdating } = useUpdateClinic()
 
   const [clinicFormData, setClinicFormData] = useState({
@@ -86,10 +84,6 @@ export default function ClinicPage() {
     })
   }, [clinic])
 
-  const handleUpdatePermissions = (secretaryId, permissions) => {
-    updatePermissions({ secretaryId, permissions })
-  }
-
   const handleClinicChange = (e) => {
     const { name, value } = e.target
     setClinicFormData((prev) => ({
@@ -131,7 +125,7 @@ export default function ClinicPage() {
 
   return (
     <div className="min-h-screen bg-background p-3 sm:p-4 md:p-6 pb-20 md:pb-6 w-full max-w-full overflow-x-hidden" dir="rtl">
-      <div className="max-w-4xl mx-auto w-full">
+      <div className="max-w-4xl mx-auto w-full" style={{ direction: 'rtl' }}>
         {/* Header */}
         <div className="mb-4 sm:mb-5 md:mb-6">
           <div className="flex items-center gap-2 sm:gap-3 md:gap-3 mb-3 sm:mb-4 md:mb-4">
@@ -158,7 +152,7 @@ export default function ClinicPage() {
         </div>
 
         {/* Tabs Navigation */}
-        <Tabs defaultValue="clinic-info" className="w-full mb-4 sm:mb-6">
+        <Tabs defaultValue="clinic-info" className="w-full mb-4 sm:mb-6" style={{ direction: 'rtl' }}>
           <TabsList className="grid grid-cols-2 w-full h-auto p-1 sm:p-1.5 bg-muted/50 rounded-lg">
             <TabsTrigger 
               value="clinic-info" 
@@ -224,7 +218,7 @@ export default function ClinicPage() {
                       إدارة الموظفين
                     </h2>
                     <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
-                      أضف وادار موظفي العيادة
+                      أضف وادر موظفي العيادة
                     </p>
                   </div>
                 </div>
@@ -234,7 +228,6 @@ export default function ClinicPage() {
                 secretaries={secretaries}
                 isLoading={isSecretariesLoading}
                 isError={isSecretariesError}
-                onUpdatePermissions={handleUpdatePermissions}
               />
             </Card>
           </TabsContent>

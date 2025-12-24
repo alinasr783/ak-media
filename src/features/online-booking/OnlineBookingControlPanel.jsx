@@ -219,16 +219,18 @@ export default function OnlineBookingControlPanel() {
       {/* Online Booking Status Card */}
       <Card className="bg-card/70">
         <CardHeader className="p-3 md:p-6">
-          <CardTitle className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-base md:text-lg">
-            <span>حالة الحجز من النت</span>
-            <div className="flex items-center gap-2">
+          <div className="flex items-center justify-between gap-3">
+            <CardTitle className="text-base md:text-lg m-0">
+              حالة الحجز من النت
+            </CardTitle>
+            <div className="flex items-center gap-2 flex-shrink-0">
               <Switch
                 checked={clinicFormData.online_booking_enabled}
                 onCheckedChange={toggleOnlineBooking}
               />
               <Badge 
                 variant={clinicFormData.online_booking_enabled ? "default" : "secondary"}
-                className="gap-1 text-xs"
+                className="gap-1 text-xs whitespace-nowrap"
               >
                 {clinicFormData.online_booking_enabled ? (
                   <>
@@ -243,7 +245,7 @@ export default function OnlineBookingControlPanel() {
                 )}
               </Badge>
             </div>
-          </CardTitle>
+          </div>
         </CardHeader>
         <CardContent className="p-3 md:p-6 pt-0">
           <p className="text-xs md:text-sm text-muted-foreground">

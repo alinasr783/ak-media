@@ -6,6 +6,7 @@ import { Input } from "../../components/ui/input"
 import { generateClinicId } from "../../lib/clinicIdGenerator"
 import useSignup from "./useSignup"
 import useVerifyClinicId from "./useVerifyClinicId"
+import { checkEmailExists } from "../../services/apiAuth"
 import { Mail, User, Building2, CheckCircle2 } from "lucide-react"
 
 const STEPS = {
@@ -23,6 +24,8 @@ export default function SignupForm() {
     message: "" 
   })
   const [verifiedClinicId, setVerifiedClinicId] = useState("")
+  const [isCheckingEmail, setIsCheckingEmail] = useState(false)
+  const [step3Touched, setStep3Touched] = useState(false)
 
   const {
     register,
@@ -44,14 +47,38 @@ export default function SignupForm() {
 
     if (currentStep === STEPS.ACCOUNT_INFO) {
       fieldsToValidate = ["email", "password", "confirmPassword"]
+      
+      // Validate form fields first
+      const isValid = await trigger(fieldsToValidate)
+      if (!isValid) return
+
+      // Check if email already exists before moving to next step
+      const email = watch("email")
+      setIsCheckingEmail(true)
+      
+      try {
+        const emailExists = await checkEmailExists(email)
+        if (emailExists) {
+          toast.error("الإيميل ده موجود قبل كده، جرب إيميل تاني")
+          setIsCheckingEmail(false)
+          return
+        }
+        setIsCheckingEmail(false)
+      } catch (error) {
+        console.error("Error checking email:", error)
+        toast.error("حصل مشكلة في التحقق من الإيميل")
+        setIsCheckingEmail(false)
+        return
+      }
+
+      setCurrentStep((prev) => prev + 1)
     } else if (currentStep === STEPS.PERSONAL_INFO) {
       fieldsToValidate = ["name", "phone", "role"]
-    }
+      
+      const isValid = await trigger(fieldsToValidate)
+      if (!isValid) return
 
-    const isValid = await trigger(fieldsToValidate)
-
-    if (isValid) {
-      if (currentStep === STEPS.PERSONAL_INFO && role === "doctor") {
+      if (role === "doctor") {
         // Generate clinic ID for doctor as UUID
         const clinicId = generateClinicId()
         setGeneratedClinicId(clinicId)
@@ -62,6 +89,10 @@ export default function SignupForm() {
 
   function handlePrevStep() {
     setCurrentStep((prev) => prev - 1)
+    // Reset step 3 touched state when going back
+    if (currentStep === STEPS.ROLE_SPECIFIC) {
+      setStep3Touched(false)
+    }
   }
 
   function handleRoleChange(e) {
@@ -72,7 +103,7 @@ export default function SignupForm() {
     if (!clinicIdInput) {
       setClinicVerification({
         status: 'error',
-        message: "يرجى إدخال معرف العيادة"
+        message: "لازم تدخل معرف العيادة"
       })
       return
     }
@@ -81,24 +112,111 @@ export default function SignupForm() {
       onSuccess: () => {
         setClinicVerification({
           status: 'success',
-          message: "تم التحقق من معرف العيادة بنجاح"
+          message: "تم التحقق بنجاح"
         })
         setVerifiedClinicId(clinicIdInput)
       },
       onError: (error) => {
         setClinicVerification({
           status: 'error',
-          message: error.message || "معرف العيادة غير صالح"
+          message: error.message || "معرف العيادة ده مش موجود"
         })
         setVerifiedClinicId("")
       },
     })
   }
 
+  async function handleCreateAccount() {
+    // Mark step 3 as touched to show validation errors
+    setStep3Touched(true)
+
+    // Get all form data to validate
+    const formData = watch()
+
+    // Validate step 3 fields based on role
+    let fieldsToValidate = []
+    if (role === "doctor") {
+      fieldsToValidate = ["clinicName", "clinicAddress"]
+      
+      // CRITICAL: Ensure clinic name and address are provided and not empty
+      if (!formData.clinicName || formData.clinicName.trim().length === 0) {
+        toast.error("لازم تدخل اسم العيادة")
+        return
+      }
+      if (formData.clinicName.trim().length < 3) {
+        toast.error("اسم العيادة لازم 3 أحرف على الأقل")
+        return
+      }
+      if (!formData.clinicAddress || formData.clinicAddress.trim().length === 0) {
+        toast.error("لازم تدخل عنوان العيادة")
+        return
+      }
+      if (formData.clinicAddress.trim().length < 5) {
+        toast.error("عنوان العيادة لازم 5 أحرف على الأقل")
+        return
+      }
+    } else if (role === "secretary") {
+      fieldsToValidate = ["clinicId"]
+    }
+
+    const isValid = await trigger(fieldsToValidate)
+    if (!isValid) {
+      toast.error("لازم تملى كل الحقول المطلوبة")
+      return
+    }
+
+    // For secretary, check if clinic ID was verified
+    if (role === "secretary" && !verifiedClinicId) {
+      toast.error("لازم تتحقق من معرف العيادة الأول")
+      return
+    }
+
+    // Generate clinic ID for doctor if not already generated
+    let finalClinicId = generatedClinicId
+    if (role === "doctor" && !finalClinicId) {
+      finalClinicId = generateClinicId()
+      setGeneratedClinicId(finalClinicId)
+    }
+
+    const userData = {
+      name: formData.name,
+      phone: formData.phone,
+      role: formData.role,
+      clinicId: role === "doctor" ? finalClinicId : verifiedClinicId,
+    }
+
+    // Add role-specific data with trimmed values
+    if (role === "doctor") {
+      userData.clinicName = formData.clinicName.trim()
+      userData.clinicAddress = formData.clinicAddress.trim()
+    } else if (role === "secretary") {
+      userData.permissions = []
+    }
+
+    console.log("Creating account with data:", userData)
+
+    signup({
+      email: formData.email,
+      password: formData.password,
+      userData,
+    })
+  }
+
   function onSubmit(data) {
+    // CRITICAL: Prevent ANY form submission unless explicitly on final step
+    // This ensures account creation only happens via manual button click
+    console.log("onSubmit called, current step:", currentStep)
+    if (currentStep !== STEPS.ROLE_SPECIFIC) {
+      console.log("Blocked submission - not on final step")
+      return
+    }
+
+    // Mark step 3 as touched
+    setStep3Touched(true)
+
     // For secretary, check if clinic ID was verified
     if (data.role === "secretary" && (!verifiedClinicId || verifiedClinicId !== data.clinicId)) {
-      toast.error("يجب التحقق من معرف العيادة قبل إنشاء الحساب")
+      toast.error("لازم تتحقق من معرف العيادة الأول")
       return
     }
 
@@ -141,7 +259,14 @@ export default function SignupForm() {
   ];
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+    <form 
+      onSubmit={(e) => {
+        e.preventDefault()
+        console.log("Form submit prevented")
+        // Do nothing - all navigation happens via buttons
+      }} 
+      className="space-y-6"
+    >
       {/* Modern Progress Bar */}
       <div className="mb-10">
         {/* Progress Line */}
@@ -209,12 +334,18 @@ export default function SignupForm() {
               id="email"
               type="email"
               {...register("email", {
-                required: "البريد الإلكتروني مطلوب",
+                required: "لازم تدخل الإيميل",
                 pattern: {
                   value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
-                  message: "البريد الإلكتروني غير صالح",
+                  message: "الإيميل ده مش صحيح",
                 },
               })}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  handleNextStep()
+                }
+              }}
             />
             {errors.email && (
               <p className="text-sm text-red-500">{errors.email.message}</p>
@@ -229,12 +360,18 @@ export default function SignupForm() {
               id="password"
               type="password"
               {...register("password", {
-                required: "كلمة المرور مطلوبة",
+                required: "لازم تدخل كلمة المرور",
                 minLength: {
                   value: 6,
-                  message: "كلمة المرور يجب أن تكون 6 أحرف على الأقل",
+                  message: "كلمة المرور لازم 6 أحرف على الأقل",
                 },
               })}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  handleNextStep()
+                }
+              }}
             />
             {errors.password && (
               <p className="text-sm text-red-500">{errors.password.message}</p>
@@ -249,10 +386,16 @@ export default function SignupForm() {
               id="confirmPassword"
               type="password"
               {...register("confirmPassword", {
-                required: "يرجى تأكيد كلمة المرور",
+                required: "لازم تأكد كلمة المرور",
                 validate: (value) =>
-                  value === password || "كلمات المرور غير متطابقة",
+                  value === password || "كلمة المرور مش متطابقة",
               })}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  handleNextStep()
+                }
+              }}
             />
             {errors.confirmPassword && (
               <p className="text-sm text-red-500">
@@ -279,12 +422,18 @@ export default function SignupForm() {
               id="name"
               type="text"
               {...register("name", {
-                required: "الاسم مطلوب",
+                required: "لازم تدخل الاسم",
                 minLength: {
                   value: 3,
-                  message: "الاسم يجب أن يكون 3 أحرف على الأقل",
+                  message: "الاسم لازم 3 أحرف على الأقل",
                 },
               })}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  handleNextStep()
+                }
+              }}
             />
             {errors.name && (
               <p className="text-sm text-red-500">{errors.name.message}</p>
@@ -299,12 +448,18 @@ export default function SignupForm() {
               id="phone"
               type="tel"
               {...register("phone", {
-                required: "رقم الهاتف مطلوب",
+                required: "لازم تدخل رقم الهاتف",
                 pattern: {
                   value: /^[0-9]{10,15}$/,
-                  message: "رقم الهاتف غير صالح",
+                  message: "رقم الهاتف مش صحيح",
                 },
               })}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  handleNextStep()
+                }
+              }}
             />
             {errors.phone && (
               <p className="text-sm text-red-500">{errors.phone.message}</p>
@@ -317,7 +472,7 @@ export default function SignupForm() {
             </label>
             <select
               id="role"
-              {...register("role", { required: "يرجى اختيار نوع المستخدم" })}
+              {...register("role", { required: "لازم تختار نوع المستخدم" })}
               onChange={handleRoleChange}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
@@ -350,15 +505,15 @@ export default function SignupForm() {
                   id="clinicName"
                   type="text"
                   {...register("clinicName", {
-                    required: "اسم العيادة مطلوب",
+                    required: step3Touched ? "لازم تدخل اسم العيادة" : false,
                     minLength: {
                       value: 3,
-                      message: "اسم العيادة يجب أن يكون 3 أحرف على الأقل",
+                      message: "اسم العيادة لازم 3 أحرف على الأقل",
                     },
                   })}
                   placeholder="مثال: عيادة د. أحمد للأسنان"
                 />
-                {errors.clinicName && (
+                {step3Touched && errors.clinicName && (
                   <p className="text-sm text-red-500">
                     {errors.clinicName.message}
                   </p>
@@ -373,15 +528,15 @@ export default function SignupForm() {
                   id="clinicAddress"
                   type="text"
                   {...register("clinicAddress", {
-                    required: "عنوان العيادة مطلوب",
+                    required: step3Touched ? "لازم تدخل عنوان العيادة" : false,
                     minLength: {
                       value: 5,
-                      message: "عنوان العيادة يجب أن يكون 5 أحرف على الأقل",
+                      message: "عنوان العيادة لازم 5 أحرف على الأقل",
                     },
                   })}
                   placeholder="مثال: 15 شارع الجامعة، القاهرة"
                 />
-                {errors.clinicAddress && (
+                {step3Touched && errors.clinicAddress && (
                   <p className="text-sm text-red-500">
                     {errors.clinicAddress.message}
                   </p>
@@ -401,7 +556,7 @@ export default function SignupForm() {
                     id="clinicId"
                     type="text"
                     {...register("clinicId", {
-                      required: "معرف العيادة مطلوب",
+                      required: "لازم تدخل معرف العيادة",
                     })}
                     placeholder="أدخل معرف العيادة من الطبيب"
                     readOnly={!!verifiedClinicId}
@@ -444,9 +599,15 @@ export default function SignupForm() {
       )}
 
       {/* Navigation Buttons */}
-      <div className="flex justify-between pt-4">
+      <div className="flex gap-2 pt-4">
         {currentStep > STEPS.ACCOUNT_INFO && (
-          <Button type="button" onClick={handlePrevStep} variant="outline">
+          <Button 
+            type="button" 
+            onClick={handlePrevStep} 
+            variant="outline"
+            className="flex-1"
+            style={{ flexBasis: '25%' }}
+          >
             السابق
           </Button>
         )}
@@ -455,15 +616,19 @@ export default function SignupForm() {
           <Button
             type="button"
             onClick={handleNextStep}
-            className={currentStep === STEPS.ACCOUNT_INFO ? "ml-auto" : ""}
+            disabled={isCheckingEmail}
+            className="flex-1"
+            style={{ flexBasis: currentStep === STEPS.ACCOUNT_INFO ? '100%' : '75%' }}
           >
-            التالي
+            {isCheckingEmail ? "جاري التحقق..." : "التالي"}
           </Button>
         ) : (
           <Button 
-            type="submit" 
+            type="button"
+            onClick={handleCreateAccount}
             disabled={isSigningUp || (role === "secretary" && !verifiedClinicId)}
-            className="ml-auto"
+            className="flex-1"
+            style={{ flexBasis: '75%' }}
           >
             {isSigningUp ? "جاري إنشاء الحساب..." : "إنشاء الحساب"}
           </Button>

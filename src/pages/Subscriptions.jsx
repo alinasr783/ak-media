@@ -234,14 +234,14 @@ export default function Subscriptions() {
     <main className="min-h-screen bg-background p-4 md:p-6" dir="rtl" lang="ar">
       <div className="container mx-auto">
         {/* Header */}
-        <div className="mb-8">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="p-2.5 rounded-xl bg-primary/10 text-primary">
-              <CreditCard className="w-6 h-6" />
+        <div className="mb-6">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="p-2 rounded-lg bg-primary/10 text-primary">
+              <CreditCard className="w-5 h-5" />
             </div>
-            <h1 className="text-3xl font-bold text-foreground">إدارة الاشتراك</h1>
+            <h1 className="text-2xl font-bold text-foreground">إدارة الاشتراك</h1>
           </div>
-          <p className="text-muted-foreground mr-14">شوف تفاصيل باقتك واستكشف الخطط التانية</p>
+          <p className="text-sm text-muted-foreground mr-11">شوف تفاصيل باقتك واستكشف الخطط التانية</p>
         </div>
 
         {isLoading ? (
@@ -283,134 +283,113 @@ export default function Subscriptions() {
         ) : (
           <>
             {/* Current Plan Section */}
-            <section className="mb-12">
-              <Card className="rounded-2xl bg-card/70">
-                <CardHeader className="pb-4 border-b border-border">
-                  <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-2">
-                        <div className="bg-primary/10 p-2 rounded-lg">
-                          <CreditCard className="w-5 h-5 text-primary" />
-                        </div>
-                        <CardTitle className="text-xl font-bold text-foreground">
-                          {hasNoSubscription ? "مفيش اشتراك فعال" : "باقتك دلوقتي"}
-                        </CardTitle>
+            <section className="mb-8">
+              <Card className="rounded-xl bg-card/70">
+                <CardHeader className="pb-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="bg-primary/10 p-2 rounded-lg">
+                        <Zap className="w-5 h-5 text-primary" />
                       </div>
-                      <p className="text-muted-foreground mr-11">
-                        {hasNoSubscription 
-                          ? "لازم تشترك عشان تستخدم كل المميزات" 
-                          : (isFreePlan ? "باقة مجانية" : currentPlan?.name || "غير محدد")}
-                      </p>
+                      <div>
+                        <CardTitle className="text-lg font-bold text-foreground">
+                          {hasNoSubscription ? "مفيش اشتراك" : "باقتك"}
+                        </CardTitle>
+                        <p className="text-sm text-muted-foreground mt-0.5">
+                          {hasNoSubscription 
+                            ? "اشترك عشان تستخدم كل المميزات" 
+                            : (isFreePlan ? "مجاني" : currentPlan?.name)}
+                        </p>
+                      </div>
                     </div>
                     
                     {!hasNoSubscription && !isFreePlan && (
-                      <Badge variant="default" className="px-3 py-1 text-xs font-medium w-fit">
+                      <Badge variant="default" className="px-3 py-1 text-xs">
                         نشط
                       </Badge>
                     )}
                   </div>
-                </CardHeader>                
+                </CardHeader>
+                
                 <CardContent className="p-6">
                   {hasNoSubscription ? (
                     <div className="text-center py-8">
-                      <div className="bg-red-100 p-4 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
-                        <ShieldAlert className="w-8 h-8 text-red-600" />
+                      <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-red-100 dark:bg-red-900/20 mb-3">
+                        <ShieldAlert className="w-6 h-6 text-red-600 dark:text-red-400" />
                       </div>
-                      <h3 className="text-lg font-medium text-gray-900 mb-2">لا يوجد اشتراك فعال</h3>
-                      <p className="text-gray-600 mb-6">
-                        يجب أن تكون مشتركًا في إحدى الباقات للوصول إلى جميع ميزات النظام
+                      <h3 className="text-base font-medium text-foreground mb-2">مفيش اشتراك فعال</h3>
+                      <p className="text-sm text-muted-foreground mb-6">
+                        اشترك في باقة عشان تستخدم كل مميزات النظام
                       </p>
                       <Button 
                         onClick={() => {
-                          // Scroll to available plans section
                           document.getElementById('available-plans')?.scrollIntoView({ behavior: 'smooth' });
                         }}
-                        className="bg-blue-600 hover:bg-blue-700 text-white"
                       >
-                        اختر باقتك الآن
+                        اختار باقتك
                       </Button>
                     </div>
                   ) : (
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                      {/* Plan Details */}
-                      <div className="space-y-4">
-                        <div className="flex items-center justify-between p-4 bg-white rounded-xl border border-gray-200">
-                          <div className="flex items-center gap-3">
-                            <div className="bg-primary/10 p-2 rounded-lg">
-                              <Zap className="w-5 h-5 text-primary" />
-                            </div>
-                            <div>
-                              <p className="font-medium text-gray-900">نوع الباقة</p>
-                              <p className="text-gray-600 text-sm">
-                                {isFreePlan ? "مجاني" : currentPlan?.name || "غير محدد"}
-                              </p>
-                            </div>
+                    <div className="space-y-6">
+                      {/* Plan Info Cards */}
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        {/* Plan Type */}
+                        <div className="p-3 rounded-lg border border-border/50 bg-muted/20">
+                          <div className="flex items-center gap-2 mb-1">
+                            <Zap className="w-4 h-4 text-primary" />
+                            <p className="text-xs text-muted-foreground">نوع الباقة</p>
                           </div>
-                          
-                          {currentPlan?.popular && (
-                            <Badge className="bg-yellow-500 hover:bg-yellow-600 text-white px-2.5 py-0.5 text-xs font-medium">
-                              الأكثر شعبية
-                            </Badge>
-                          )}
+                          <p className="text-sm font-medium">
+                            {isFreePlan ? "مجاني" : currentPlan?.name}
+                          </p>
                         </div>
                         
-                        <div className="flex items-center justify-between p-4 bg-white rounded-xl border border-gray-200">
-                          <div className="flex items-center gap-3">
-                            <div className="bg-primary/10 p-2 rounded-lg">
-                              <Calendar className="w-5 h-5 text-primary" />
-                            </div>
-                            <div>
-                              <p className="font-medium text-gray-900">فترة الفوترة</p>
-                              <p className="text-gray-600 text-sm">
-                                {billingPeriod === "annual" ? "سنوي" : "شهري"}
-                              </p>
-                            </div>
+                        {/* Billing Period */}
+                        <div className="p-3 rounded-lg border border-border/50 bg-muted/20">
+                          <div className="flex items-center gap-2 mb-1">
+                            <Calendar className="w-4 h-4 text-primary" />
+                            <p className="text-xs text-muted-foreground">فترة الفوترة</p>
                           </div>
-                          
-                          {!isFreePlan && (
-                            <Button 
-                              variant="outline" 
-                              size="sm"
-                              onClick={handleToggleBillingPeriod}
-                              className="text-xs"
-                            >
-                              <RotateCcw className="w-3 h-3 ml-1" />
-                              تغيير
-                            </Button>
-                          )}
-                        </div>
-                        
-                        {/* Subscription End Date - Moved here for large screens */}
-                        {!isFreePlan && subscriptionEndDate && (
-                          <div className="flex items-center justify-between p-4 bg-white rounded-xl border border-gray-200">
-                            <div className="flex items-center gap-3">
-                              <div className="bg-primary/10 p-2 rounded-lg">
-                                <CalendarDays className="w-5 h-5 text-primary" />
-                              </div>
-                              <div>
-                                <p className="font-medium text-gray-900">انتهاء الاشتراك</p>
-                                <p className="text-gray-600 text-sm">
-                                  {format(new Date(subscriptionEndDate), "dd MMMM yyyy", { locale: ar })}
-                                </p>
-                              </div>
-                            </div>
-                            
-                            {daysRemaining !== null && (
-                              <Badge 
-                                variant={daysRemaining <= 7 ? "destructive" : "secondary"}
-                                className="px-2.5 py-0.5 text-xs font-medium"
+                          <div className="flex items-center justify-between">
+                            <p className="text-sm font-medium">
+                              {billingPeriod === "annual" ? "سنوي" : "شهري"}
+                            </p>
+                            {!isFreePlan && (
+                              <Button 
+                                variant="ghost" 
+                                size="sm"
+                                onClick={handleToggleBillingPeriod}
+                                className="h-6 px-2 text-xs"
                               >
+                                تغيير
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                        
+                        {/* Expiry Date */}
+                        {!isFreePlan && subscriptionEndDate && (
+                          <div className="p-3 rounded-lg border border-border/50 bg-muted/20">
+                            <div className="flex items-center gap-2 mb-1">
+                              <CalendarDays className="w-4 h-4 text-primary" />
+                              <p className="text-xs text-muted-foreground">الانتهاء</p>
+                            </div>
+                            <p className="text-sm font-medium">
+                              {format(new Date(subscriptionEndDate), "dd MMM yyyy", { locale: ar })}
+                            </p>
+                            {daysRemaining !== null && (
+                              <p className="text-xs text-muted-foreground mt-1">
                                 {daysRemaining} {daysRemaining === 1 ? "يوم" : "أيام"} متبقية
-                              </Badge>
+                              </p>
                             )}
                           </div>
                         )}
                       </div>
                       
                       {/* Usage Stats */}
-                      <div className="lg:col-span-2 space-y-4">
-                        <div className="p-4 bg-white rounded-xl border border-gray-200">
-                          <h3 className="font-medium text-gray-900 mb-3">إحصائيات الاستخدام</h3>
+                      <div className="space-y-4">
+                        <div className="p-4 rounded-lg border border-border/50 bg-muted/20">
+                          <h3 className="text-sm font-medium text-foreground mb-4">إحصائيات الاستخدام</h3>
                           
                           {/* Patient Usage */}
                           <div className="mb-4">
@@ -423,7 +402,7 @@ export default function Subscriptions() {
                           </div>
                           
                           {/* Appointment Usage */}
-                          <div className="mb-4">
+                          <div>
                             <UsageProgressBar 
                               percentage={appointmentUsagePercentage}
                               used={usageStats?.monthlyAppointments || 0}
@@ -431,42 +410,49 @@ export default function Subscriptions() {
                               label="الحجوزات الشهرية"
                             />
                           </div>
-                          
-                          {/* Appointment Source Stats */}
-                          {(usageStats?.monthlyAppointments > 0 || usageStats?.onlineAppointments > 0 || usageStats?.clinicAppointments > 0) && (
-                            <div className="grid grid-cols-2 gap-3 mt-4 pt-3 border-t border-gray-100">
-                              <div className="flex items-center gap-2 p-2 bg-blue-50 rounded-lg">
-                                <Globe className="w-4 h-4 text-blue-500" />
-                                <div>
-                                  <p className="text-xs text-gray-600">من الموقع</p>
-                                  <p className="font-medium text-sm">
-                                    {usageStats?.onlineAppointments || 0}
-                                  </p>
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-2 p-2 bg-green-50 rounded-lg">
-                                <Building className="w-4 h-4 text-green-500" />
-                                <div>
-                                  <p className="text-xs text-gray-600">من العيادة</p>
-                                  <p className="font-medium text-sm">
-                                    {usageStats?.clinicAppointments || 0}
-                                  </p>
-                                </div>
-                              </div>
-                            </div>
-                          )}
-                          
-                          {/* Income */}
-                          <div className="flex items-center justify-between pt-3 border-t border-gray-100 mt-4">
-                            <div className="flex items-center gap-2">
-                              <DollarSign className="w-4 h-4 text-green-500" />
-                              <span className="text-sm text-gray-600">الإيرادات الكلية</span>
-                            </div>
-                            <span className="font-medium">
-                              {formatCurrency(usageStats?.totalIncome || 0)}
-                            </span>
-                          </div>
                         </div>
+                        
+                        {/* Appointment Source & Income */}
+                        {(usageStats?.monthlyAppointments > 0 || usageStats?.totalIncome > 0) && (
+                          <div className="p-4 rounded-lg border border-border/50 bg-muted/20">
+                            {/* Appointment Sources */}
+                            {usageStats?.monthlyAppointments > 0 && (
+                              <div className="grid grid-cols-2 gap-3 mb-4">
+                                <div className="flex items-center gap-2 p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                                  <Globe className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                                  <div>
+                                    <p className="text-xs text-muted-foreground">من الموقع</p>
+                                    <p className="text-sm font-medium">
+                                      {usageStats?.onlineAppointments || 0}
+                                    </p>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2 p-2 bg-green-50 dark:bg-green-900/20 rounded-lg">
+                                  <Building className="w-4 h-4 text-green-600 dark:text-green-400" />
+                                  <div>
+                                    <p className="text-xs text-muted-foreground">من العيادة</p>
+                                    <p className="text-sm font-medium">
+                                      {usageStats?.clinicAppointments || 0}
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                            
+                            {/* Income */}
+                            {usageStats?.totalIncome > 0 && (
+                              <div className="flex items-center justify-between pt-3 border-t border-border">
+                                <div className="flex items-center gap-2">
+                                  <DollarSign className="w-4 h-4 text-green-600 dark:text-green-400" />
+                                  <span className="text-xs text-muted-foreground">الإيرادات</span>
+                                </div>
+                                <span className="text-sm font-medium">
+                                  {formatCurrency(usageStats?.totalIncome || 0)}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </div>
                   )}

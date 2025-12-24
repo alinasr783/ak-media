@@ -1,6 +1,6 @@
 import { format, parse } from "date-fns";
 import { ar } from "date-fns/locale";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "./button";
 import { Calendar } from "./calendar";
 import { ScrollArea } from "./scroll-area";
@@ -11,11 +11,68 @@ export default function AppointmentTimePicker({
   selectedTime, 
   onTimeChange,
   availableTimeSlots = [],
-  clinicAvailableTime = null
+  clinicAvailableTime = null,
+  autoSelectFirstAvailable = false // New prop for auto-selection
 }) {
   const today = new Date();
   const [date, setDate] = useState(selectedDate || today);
   const [time, setTime] = useState(selectedTime || null);
+  const [hasAutoSelected, setHasAutoSelected] = useState(false);
+
+  // Function to check if a date is available based on clinic hours
+  const isDateAvailableCheck = (dateToCheck) => {
+    // Disable past dates (but allow today)
+    const todayDate = new Date();
+    todayDate.setHours(0, 0, 0, 0);
+    const checkDate = new Date(dateToCheck);
+    checkDate.setHours(0, 0, 0, 0);
+    
+    if (checkDate < todayDate) {
+      return false;
+    }
+    
+    // If no clinic hours provided, enable all future dates including today
+    if (!clinicAvailableTime) return true;
+    
+    const dayOfWeek = dateToCheck.toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
+    const dayConfig = clinicAvailableTime[dayOfWeek];
+    
+    // If day is off or missing configuration, disable the date
+    if (!dayConfig || dayConfig.off) return false;
+    
+    return true;
+  };
+
+  // Find first available date
+  const findFirstAvailableDate = () => {
+    if (!autoSelectFirstAvailable || !clinicAvailableTime) return today;
+    
+    const maxDaysToCheck = 30; // Check up to 30 days ahead
+    const startDate = new Date();
+    
+    for (let i = 0; i < maxDaysToCheck; i++) {
+      const checkDate = new Date(startDate);
+      checkDate.setDate(startDate.getDate() + i);
+      
+      if (isDateAvailableCheck(checkDate)) {
+        return checkDate;
+      }
+    }
+    
+    return today; // Fallback to today if no available date found
+  };
+
+  // Auto-select first available date on mount if enabled
+  useEffect(() => {
+    if (autoSelectFirstAvailable && !selectedDate && !hasAutoSelected) {
+      const firstAvailable = findFirstAvailableDate();
+      setDate(firstAvailable);
+      setHasAutoSelected(true);
+      if (onDateChange) {
+        onDateChange(firstAvailable);
+      }
+    }
+  }, [autoSelectFirstAvailable, selectedDate, hasAutoSelected, clinicAvailableTime]);
 
   // Default time slots if none provided (12-hour format)
   const defaultTimeSlots = [

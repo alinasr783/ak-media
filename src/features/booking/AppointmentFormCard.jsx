@@ -29,6 +29,12 @@ export default function AppointmentFormCard({
   setSelectedTime,
 }) {
   const appointmentDate = watch("date");
+  const watchNotes = watch("notes");
+
+  // Handle quick appointment type selection
+  const handleQuickAppointmentType = (type) => {
+    setValue("notes", type, { shouldValidate: true });
+  };
 
   // Function to convert 12-hour time format to 24-hour format
   const convertTo24Hour = (time12h) => {
@@ -120,6 +126,7 @@ export default function AppointmentFormCard({
                 }
               }}
               clinicAvailableTime={clinic?.available_time}
+              autoSelectFirstAvailable={true}
             />
             <input
               type="hidden"
@@ -192,6 +199,24 @@ export default function AppointmentFormCard({
             {errors.notes && (
               <p className="text-sm text-red-500">{errors.notes.message}</p>
             )}
+            
+            {/* الخيارات السريعة */}
+            <div className="flex flex-wrap gap-2">
+              {['كشف أولي', 'متابعة', 'استشارة', 'فحص', 'علاج'].map((type) => (
+                <button
+                  key={type}
+                  type="button"
+                  onClick={() => handleQuickAppointmentType(type)}
+                  className={`px-3 py-1.5 border rounded-lg text-sm transition-colors ${
+                    watchNotes === type 
+                      ? 'bg-primary text-white border-primary' 
+                      : 'bg-white border-gray-300 hover:border-primary'
+                  }`}
+                >
+                  {type}
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Price (Read-only) */}

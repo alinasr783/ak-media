@@ -1,12 +1,42 @@
-import { useQuery } from "@tanstack/react-query"
-import { getAppointments } from "../../services/apiAppointments"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
+import { useEffect } from "react"
+import { getAppointments, subscribeToAppointments } from "../../services/apiAppointments"
+import useClinic from "../auth/useClinic"
 
 export default function useAppointments(search, page, pageSize = 10, filters = {}) {
-    return useQuery({
+    const queryClient = useQueryClient()
+    const { data: clinic } = useClinic()
+    
+    const queryResult = useQuery({
         queryKey: ["appointments", search, page, pageSize, filters],
         queryFn: () => getAppointments(search, page, pageSize, filters),
         meta: {
             errorMessage: "فشل في تحميل المواعيد"
         }
     })
+
+    // Setup real-time subscription
+    useEffect(() => {
+        if (!clinic?.clinic_uuid) return
+
+        console.log("Setting up real-time subscription for appointments, clinic:", clinic.clinic_uuid)
+
+        const unsubscribe = subscribeToAppointments(
+            (payload) => {
+                console.log("Real-time appointment change:", payload)
+                
+                // Invalidate and refetch appointments
+                queryClient.invalidateQueries({ queryKey: ["appointments"] })
+            },
+            clinic.clinic_uuid,
+            filters.source // Pass source filter to only listen to relevant appointments
+        )
+
+        return () => {
+            console.log("Cleaning up real-time subscription for appointments")
+            unsubscribe()
+        }
+    }, [clinic?.clinic_uuid, filters.source, queryClient])
+
+    return queryResult
 }

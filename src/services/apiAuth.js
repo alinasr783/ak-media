@@ -1,6 +1,40 @@
 import supabase from "./supabase"
 
+// Check if email already exists
+export async function checkEmailExists(email) {
+    const { data, error } = await supabase
+        .from("users")
+        .select("email")
+        .eq("email", email)
+        .maybeSingle()
+    
+    if (error && error.code !== 'PGRST116') throw error
+    return !!data
+}
+
 export async function signup({ email, password, userData }) {
+    // Check if email already exists before creating account
+    const emailExists = await checkEmailExists(email)
+    if (emailExists) {
+        throw new Error("الإيميل ده موجود قبل كده، جرب إيميل تاني")
+    }
+
+    // CRITICAL VALIDATION: For doctors, ensure clinic name and address are provided
+    if (userData.role === "doctor") {
+        if (!userData.clinicName || userData.clinicName.trim().length === 0) {
+            throw new Error("لازم تدخل اسم العيادة")
+        }
+        if (userData.clinicName.trim().length < 3) {
+            throw new Error("اسم العيادة لازم 3 أحرف على الأقل")
+        }
+        if (!userData.clinicAddress || userData.clinicAddress.trim().length === 0) {
+            throw new Error("لازم تدخل عنوان العيادة")
+        }
+        if (userData.clinicAddress.trim().length < 5) {
+            throw new Error("عنوان العيادة لازم 5 أحرف على الأقل")
+        }
+    }
+
     const { data, error } = await supabase.auth.signUp({
         email,
         password,
@@ -13,7 +47,13 @@ export async function signup({ email, password, userData }) {
         },
     })
 
-    if (error) throw error
+    if (error) {
+        // Translate common Supabase errors to Egyptian Arabic
+        if (error.message.includes("already registered") || error.message.includes("already exists")) {
+            throw new Error("الإيميل ده موجود قبل كده، جرب إيميل تاني")
+        }
+        throw new Error(error.message)
+    }
 
     // Insert user data into users table
     // Use clinic_id as UUID string
@@ -34,14 +74,14 @@ export async function signup({ email, password, userData }) {
         throw insertError
     }
 
-    // If user is a doctor, create clinic record
+    // If user is a doctor, create clinic record with validated data
     if (userData.role === "doctor") {
         const { error: clinicError } = await supabase.from("clinics").insert([
             {
                 clinic_uuid: userData.clinicId, // Use clinic_uuid as the main identifier
                 clinic_id_bigint: null, // Don't set clinic_id_bigint for new records
-                name: userData.clinicName,
-                address: userData.clinicAddress,
+                name: userData.clinicName.trim(),
+                address: userData.clinicAddress.trim(),
             },
         ])
 
@@ -60,7 +100,16 @@ export async function login({ email, password }) {
         password,
     })
 
-    if (error) throw error
+    if (error) {
+        // Translate common login errors to Egyptian Arabic
+        if (error.message.includes("Invalid login credentials") || error.message.includes("invalid")) {
+            throw new Error("الإيميل أو الباسورد غلط")
+        }
+        if (error.message.includes("Email not confirmed")) {
+            throw new Error("لازم تأكد الإيميل الأول")
+        }
+        throw new Error(error.message)
+    }
 
     return data
 }
@@ -213,9 +262,9 @@ export async function verifyClinicId(clinicId) {
 
     if (error) {
         if (error.code === "PGRST116") {
-            throw new Error("معرف العيادة غير موجود")
+            throw new Error("معرف العيادة ده مش موجود")
         }
-        throw error
+        throw new Error("حصل مشكلة في التحقق من معرف العيادة")
     }
 
     return data
@@ -238,10 +287,14 @@ export async function getClinicSecretaries(clinicId) {
     return data
 }
 
-export async function addSecretary({ name, email, phone, clinicId, permissions = [] }) {
+export async function addSecretary({ name, email, password, phone, clinicId, permissions = [] }) {
   // Validate inputs
-  if (!name || !email || !clinicId) {
-    throw new Error("الاسم والبريد الإلكتروني ومعرف العيادة مطلوبة");
+  if (!name || !email || !password || !clinicId) {
+    throw new Error("لازم تدخل كل البيانات");
+  }
+
+  if (password.length < 6) {
+    throw new Error("كلمة السر لازم 6 أحرف على الأقل");
   }
 
   // Check if email already exists
@@ -252,16 +305,16 @@ export async function addSecretary({ name, email, phone, clinicId, permissions =
     .maybeSingle();
 
   if (existingUser) {
-    throw new Error("هذا البريد الإلكتروني مستخدم بالفعل");
+    throw new Error("الإيميل ده مستخدم قبل كده");
   }
 
-  // Generate a temporary password
-  const tempPassword = Math.random().toString(36).slice(-8);
+  // Get current session to restore later
+  const { data: { session: currentSession } } = await supabase.auth.getSession();
 
-  // Create auth user
+  // Create auth user using signUp
   const { data: authData, error: authError } = await supabase.auth.signUp({
     email,
-    password: tempPassword,
+    password,
     options: {
       data: {
         name,
@@ -273,8 +326,15 @@ export async function addSecretary({ name, email, phone, clinicId, permissions =
 
   if (authError) throw authError;
 
+  // Immediately restore the original session to prevent logout
+  if (currentSession) {
+    await supabase.auth.setSession({
+      access_token: currentSession.access_token,
+      refresh_token: currentSession.refresh_token,
+    });
+  }
+
   // Insert user data into users table
-  // Use clinic_id instead of clinic_id_bigint
   const { error: insertError } = await supabase.from("users").insert([
     {
       user_id: authData.user.id,
@@ -282,19 +342,15 @@ export async function addSecretary({ name, email, phone, clinicId, permissions =
       name,
       phone: phone || "",
       role: "secretary",
-      clinic_id: clinicId, // Use clinic_id instead of clinic_id_bigint
+      clinic_id: clinicId,
       permissions: permissions.length > 0 ? permissions : ["dashboard", "calendar", "patients"],
     },
   ]);
 
   if (insertError) {
-    // If user insertion fails, delete the auth user
-    await supabase.auth.admin.deleteUser(authData.user.id);
-    throw insertError;
+    console.error("Failed to insert user data:", insertError);
+    throw new Error("حصل خطأ في إضافة بيانات الموظف");
   }
-
-  // Send invitation email (in a real implementation, you would send an actual email)
-  console.log(`Send invitation email to ${email} with password: ${tempPassword}`);
 
   return authData.user;
 }

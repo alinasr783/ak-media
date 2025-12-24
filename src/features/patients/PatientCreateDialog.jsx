@@ -60,7 +60,7 @@ export default function PatientCreateDialog({open, onClose, onPatientCreated, cl
     <Dialog open={open} onOpenChange={onClose}  style={{ direction: 'rtl' }}>
       <DialogContent className="sm:max-w-[500px] w-[95vw] max-h-[90vh] h-auto p-0 rounded-xl border-0 shadow-2xl" dir="rtl">
         {/* Header */}
-        <DialogHeader className="p-4 border-b border-gray-200 bg-white sticky top-0 z-10">
+        <DialogHeader className="p-4 bg-white sticky top-0 z-10">
           <div className="flex items-center justify-between">
             <DialogTitle className="text-lg font-bold text-gray-900" style={{ direction: 'rtl' }}>
               إضافة مريض جديد

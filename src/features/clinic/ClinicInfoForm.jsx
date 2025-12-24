@@ -59,7 +59,7 @@ export default function ClinicInfoForm({
         <div className="space-y-1.5 sm:space-y-2">
           <div className="flex items-center gap-1.5 sm:gap-2">
             <Building className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-muted-foreground flex-shrink-0" />
-            <Label htmlFor="clinicName" className="text-foreground font-medium text-xs sm:text-sm md:text-base truncate">
+            <Label htmlFor="clinicName" className="text-foreground font-medium text-xs sm:text-sm md:text-base truncate" style={{ direction: 'rtl' }}>
               اسم العيادة
             </Label>
           </div>

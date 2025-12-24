@@ -24,8 +24,8 @@ export function Dialog({open, onClose, children}) {
   );
 }
 
-export function DialogHeader({children}) {
-  return <div className="p-6 border-b border-border">{children}</div>;
+export function DialogHeader({children, className}) {
+  return <div className={cn("p-6 pb-4", className)}>{children}</div>;
 }
 
 export function DialogContent({children, className}) {
@@ -36,9 +36,9 @@ export function DialogTitle({children}) {
   return <h1 className="text-lg font-semibold leading-none tracking-tight">{children}</h1>;
 }
 
-export function DialogFooter({children}) {
+export function DialogFooter({children, className}) {
   return (
-    <div className="p-6 border-t border-border flex justify-end gap-2">
+    <div className={cn("p-6 pt-4 flex justify-end gap-2", className)}>
       {children}
     </div>
   );

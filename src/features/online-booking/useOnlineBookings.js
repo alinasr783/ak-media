@@ -66,27 +66,64 @@ export function useOnlineBookings(clinicId) {
     const setupSubscription = async () => {
       await fetchBookings();
 
+      console.log('Setting up real-time subscription for clinic:', clinicId);
+
       const channel = supabase
-        .channel('online-bookings-changes')
+        .channel(`online-bookings-${clinicId}`) // Unique channel per clinic
         .on(
           'postgres_changes',
           {
             event: 'INSERT',
             schema: 'public',
             table: 'appointments',
-            filter: `clinic_id=eq.${clinicId}&from=eq.booking`
+            filter: `clinic_id=eq.${clinicId}`
           },
-          (payload) => {
-            // Add new booking to the top of the list
-            setBookings(prev => {
-              const newList = [payload.new, ...prev];
-              // Re-sort to maintain pending-first order
-              return newList.sort((a, b) => {
-                if (a.status === "pending" && b.status !== "pending") return -1;
-                if (b.status === "pending" && a.status !== "pending") return 1;
-                return new Date(b.created_at) - new Date(a.created_at);
+          async (payload) => {
+            console.log('New appointment received:', payload);
+            
+            // Check if this is a booking (from = 'booking')
+            if (payload.new.from !== 'booking') {
+              console.log('Not a booking, ignoring');
+              return;
+            }
+
+            // Fetch the complete appointment data with patient info
+            try {
+              const { data: completeData, error: fetchError } = await supabase
+                .from('appointments')
+                .select(`
+                  id,
+                  date,
+                  notes,
+                  price,
+                  status,
+                  from,
+                  patient:patients(id, name, phone),
+                  created_at
+                `)
+                .eq('id', payload.new.id)
+                .single();
+
+              if (fetchError) {
+                console.error('Error fetching complete appointment:', fetchError);
+                return;
+              }
+
+              console.log('Complete appointment data:', completeData);
+
+              // Add new booking to the top of the list
+              setBookings(prev => {
+                const newList = [completeData, ...prev];
+                // Re-sort to maintain pending-first order
+                return newList.sort((a, b) => {
+                  if (a.status === "pending" && b.status !== "pending") return -1;
+                  if (b.status === "pending" && a.status !== "pending") return 1;
+                  return new Date(b.created_at) - new Date(a.created_at);
+                });
               });
-            });
+            } catch (err) {
+              console.error('Error in INSERT handler:', err);
+            }
           }
         )
         .on(
@@ -95,24 +132,56 @@ export function useOnlineBookings(clinicId) {
             event: 'UPDATE',
             schema: 'public',
             table: 'appointments',
-            filter: `clinic_id=eq.${clinicId}&from=eq.booking`
+            filter: `clinic_id=eq.${clinicId}`
           },
-          (payload) => {
-            // Update existing booking in the list
-            setBookings(prev => {
-              const index = prev.findIndex(item => item.id === payload.new.id);
-              if (index !== -1) {
-                const newList = [...prev];
-                newList[index] = payload.new;
-                // Re-sort to maintain pending-first order
-                return newList.sort((a, b) => {
-                  if (a.status === "pending" && b.status !== "pending") return -1;
-                  if (b.status === "pending" && a.status !== "pending") return 1;
-                  return new Date(b.created_at) - new Date(a.created_at);
-                });
+          async (payload) => {
+            console.log('Appointment updated:', payload);
+            
+            // Check if this is a booking
+            if (payload.new.from !== 'booking') {
+              return;
+            }
+
+            // Fetch the complete appointment data with patient info
+            try {
+              const { data: completeData, error: fetchError } = await supabase
+                .from('appointments')
+                .select(`
+                  id,
+                  date,
+                  notes,
+                  price,
+                  status,
+                  from,
+                  patient:patients(id, name, phone),
+                  created_at
+                `)
+                .eq('id', payload.new.id)
+                .single();
+
+              if (fetchError) {
+                console.error('Error fetching complete appointment:', fetchError);
+                return;
               }
-              return prev;
-            });
+
+              // Update existing booking in the list
+              setBookings(prev => {
+                const index = prev.findIndex(item => item.id === payload.new.id);
+                if (index !== -1) {
+                  const newList = [...prev];
+                  newList[index] = completeData;
+                  // Re-sort to maintain pending-first order
+                  return newList.sort((a, b) => {
+                    if (a.status === "pending" && b.status !== "pending") return -1;
+                    if (b.status === "pending" && a.status !== "pending") return 1;
+                    return new Date(b.created_at) - new Date(a.created_at);
+                  });
+                }
+                return prev;
+              });
+            } catch (err) {
+              console.error('Error in UPDATE handler:', err);
+            }
           }
         )
         .on(
@@ -121,17 +190,21 @@ export function useOnlineBookings(clinicId) {
             event: 'DELETE',
             schema: 'public',
             table: 'appointments',
-            filter: `clinic_id=eq.${clinicId}&from=eq.booking`
+            filter: `clinic_id=eq.${clinicId}`
           },
           (payload) => {
+            console.log('Appointment deleted:', payload);
             // Remove deleted booking from the list
             setBookings(prev => prev.filter(item => item.id !== payload.old.id));
           }
         )
-        .subscribe();
+        .subscribe((status) => {
+          console.log('Subscription status:', status);
+        });
 
       // Cleanup subscription on unmount
       return () => {
+        console.log('Cleaning up subscription');
         supabase.removeChannel(channel);
       };
     };

@@ -45,6 +45,7 @@ export default function AppointmentCreateDialog({ open, onClose }) {
   const [selectedDate, setSelectedDate] = useState(null);
   const [selectedTime, setSelectedTime] = useState(null);
   const [step, setStep] = useState(1);
+  const [autoSelectEnabled, setAutoSelectEnabled] = useState(true);
   const { data: searchResults, isLoading: isSearching } = useSearchPatients(patientSearch);
 
   const watchPrice = watch("price");
@@ -58,6 +59,7 @@ export default function AppointmentCreateDialog({ open, onClose }) {
     setSelectedDate(null);
     setSelectedTime(null);
     setStep(1);
+    setAutoSelectEnabled(true); // Reset auto-select for next time
     onClose();
   };
 
@@ -161,8 +163,20 @@ export default function AppointmentCreateDialog({ open, onClose }) {
     setValue("notes", type, { shouldValidate: true });
   };
 
+  // Handle date change and disable auto-select after first manual selection
+  const handleDateChange = (date) => {
+    setSelectedDate(date);
+    if (autoSelectEnabled) {
+      setAutoSelectEnabled(false);
+    }
+  };
+
+  const handleTimeChange = (time) => {
+    setSelectedTime(time);
+  };
+
   // حساب إذا كان يمكن الانتقال للخطوة التالية
-  const canProceedToStep2 = selectedPatient && selectedDate && selectedTime;
+  const canProceedToStep2 = !!(selectedPatient && selectedDate && selectedTime);
   
   // Ensure we don't automatically advance to step 2
   // This is to prevent automatic submission when all fields are filled
@@ -188,67 +202,70 @@ export default function AppointmentCreateDialog({ open, onClose }) {
   return (
     <>
       <Dialog open={open} onOpenChange={handleClose}>
-        <DialogContent className="sm:max-w-[500px] w-[95vw] max-h-[90vh] h-auto p-0 rounded-xl border-0 shadow-2xl" dir="rtl">
+        <DialogContent className="sm:max-w-[550px] w-[95vw] max-h-[92vh] p-0 rounded-xl" dir="rtl">
           {/* Header */}
-          <DialogHeader className="p-4 border-b border-gray-200 bg-white sticky top-0 z-10">
+          <DialogHeader className="p-4 sticky top-0 z-10 bg-background border-b border-border">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Button
                   variant="ghost"
                   size="icon"
                   onClick={handleClose}
-                  className="h-8 w-8 rounded-full hover:bg-gray-100"
+                  className="h-8 w-8 rounded-lg"
                 >
                   <X className="w-4 h-4" />
                 </Button>
-                <DialogTitle className="text-lg font-bold text-gray-900">
-                  إضافة موعد جديد
+                <DialogTitle className="text-lg font-bold">
+                  موعد جديد
                 </DialogTitle>
               </div>
               
               <div className="flex items-center gap-2">
-                <div className={`flex items-center gap-2 ${step >= 1 ? 'text-primary' : 'text-gray-400'}`}>
-                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs ${step >= 1 ? 'bg-primary text-white' : 'bg-gray-200'}`}>
-                    ٢
-                  </div>
+                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs transition-all ${
+                  step === 1 ? 'bg-primary text-white' : 'bg-primary/20 text-primary'
+                }`}>
+                  1
                 </div>
                 
-                <div className="h-[2px] w-4 bg-gray-300"></div>
+                <div className={`h-[2px] w-8 transition-colors ${
+                  step === 2 ? 'bg-primary' : 'bg-border'
+                }`}></div>
                 
-                <div className={`flex items-center gap-2 ${step >= 2 ? 'text-primary' : 'text-gray-400'}`}>
-                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs ${step >= 2 ? 'bg-primary text-white' : 'bg-gray-200'}`}>
-                    ٢
-                  </div>
+                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs transition-all ${
+                  step === 2 ? 'bg-primary text-white' : 'bg-muted text-muted-foreground'
+                }`}>
+                  2
                 </div>
               </div>
             </div>
           </DialogHeader>
 
           {/* Content */}
-          <div className="flex-1 overflow-y-auto px-4 pt-4 pb-4 max-h-[calc(90vh-80px)] [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+          <div className="flex-1 overflow-y-auto p-4 max-h-[calc(92vh-80px)] [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
             <form onSubmit={handleSubmit(onSubmit)} onKeyDown={handleKeyDown} className="space-y-6">
               {/* الخطوة 1: اختيار المريض والموعد */}
               {step === 1 && (
-                <div className="space-y-6">
+                <div className="space-y-5">
                   {/* اختيار المريض */}
-                  <div className="space-y-4">
-<div className="flex items-center justify-between" style={{ direction: 'rtl' }}>
-                      <h3 className="font-semibold text-gray-900 text-lg">
-                        ٢. اختيار المريض
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-sm font-medium text-foreground flex items-center gap-2">
+                        <User className="w-4 h-4 text-primary" />
+                        اختيار المريض
                       </h3>
                       {selectedPatient && (
-                        <Badge className="bg-green-500 text-white text-xs">
-                           تم الاختيار
+                        <Badge variant="default" className="text-xs">
+                          تم
                         </Badge>
                       )}
                     </div>
                     
                     {/* البحث */}
-                    <div className="space-y-3"  style={{ direction: 'rtl' }}>
-                      <div className="relative"  style={{ direction: 'rtl' }}>
-                        <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" style={{ direction: 'rtl' }} />
-                        <Input  style={{ direction: 'rtl' }}
-                          className="pr-9 text-base border-gray-300 focus:border-primary h-11 "
+                    <div className="space-y-2">
+                      <div className="relative">
+                        <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground w-4 h-4" />
+                        <Input
+                          className="pr-9 h-10"
                           placeholder="ابحث عن مريض..."
                           value={patientSearch}
                           onChange={(e) => setPatientSearch(e.target.value)}
@@ -260,20 +277,21 @@ export default function AppointmentCreateDialog({ open, onClose }) {
                         type="button"
                         onClick={() => setShowPatientDialog(true)}
                         variant="outline"
-                        className="w-full border border-gray-300 hover:border-primary hover:bg-blue-50 h-11"
+                        className="w-full h-9"
+                        size="sm"
                       >
                         <UserPlus className="w-4 h-4 ml-2" />
-                        إضافة مريض جديد
+                        مريض جديد
                       </Button>
                     </div>
 
                     {/* نتائج البحث */}
                     {patientSearch.length >= 2 && !selectedPatient && (
-                      <div className="border border-gray-200 rounded-lg overflow-hidden shadow-sm max-h-48 overflow-y-auto" style={{ direction: 'rtl' }}>
+                      <div className="rounded-lg border border-border overflow-hidden max-h-48 overflow-y-auto">
                         {isSearching ? (
-                          <div className="p-4 text-center" style={{ direction: 'rtl' }}>
-                            <Loader2 className="w-5 h-5 animate-spin text-primary mx-auto" style={{ direction: 'rtl' }} />
-                            <p className="text-gray-500 text-sm mt-2" style={{ direction: 'rtl' }}>جاري البحث...</p>
+                          <div className="p-4 text-center">
+                            <Loader2 className="w-4 h-4 animate-spin text-primary mx-auto" />
+                            <p className="text-muted-foreground text-xs mt-2">جاري البحث...</p>
                           </div>
                         ) : searchResults?.length > 0 ? (
                           <div>
@@ -281,29 +299,29 @@ export default function AppointmentCreateDialog({ open, onClose }) {
                               <button
                                 key={patient.id}
                                 type="button"
-                                className="w-full p-3 text-right hover:bg-gray-50 border-b border-gray-100 last:border-b-0 flex items-center justify-between"
+                                className="w-full p-2.5 text-right hover:bg-muted/50 border-b border-border last:border-b-0 flex items-center justify-between transition-colors"
                                 onClick={() => handlePatientSelect(patient)}
                               >
-                                <div className="flex items-center gap-3">
-                                  <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center">
-                                    <User className="w-4 h-4 text-primary" />
+                                <div className="flex items-center gap-2">
+                                  <div className="w-7 h-7 bg-primary/10 rounded-full flex items-center justify-center">
+                                    <User className="w-3.5 h-3.5 text-primary" />
                                   </div>
                                   <div>
-                                    <div className="font-medium text-gray-900">
+                                    <div className="text-sm font-medium">
                                       {patient.name}
                                     </div>
-                                    <div className="text-xs text-gray-500">
+                                    <div className="text-xs text-muted-foreground">
                                       {patient.phone}
                                     </div>
                                   </div>
                                 </div>
-                                <ChevronLeft className="w-4 h-4 text-gray-400" />
+                                <ChevronLeft className="w-4 h-4 text-muted-foreground" />
                               </button>
                             ))}
                           </div>
                         ) : (
-                          <div className="p-4 text-center"  style={{ direction: 'rtl' }}>
-                            <p className="text-gray-500">لا توجد نتائج</p>
+                          <div className="p-4 text-center">
+                            <p className="text-muted-foreground text-xs">لا توجد نتائج</p>
                           </div>
                         )}
                       </div>
@@ -311,18 +329,18 @@ export default function AppointmentCreateDialog({ open, onClose }) {
 
                     {/* المريض المختار */}
                     {selectedPatient && (
-                      <Card className="bg-green-50 border-green-200" style={{ direction: 'rtl' }}>
-                        <CardContent className="p-3" style={{ direction: 'rtl' }}>
-                          <div className="flex items-center justify-between" style={{ direction: 'rtl' }}>
-                            <div className="flex items-center gap-3" style={{ direction: 'rtl' }}>
-                              <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center" style={{ direction: 'rtl' }}>
-                                <User className="w-5 h-5 text-green-600" style={{ direction: 'rtl' }} />
+                      <Card className="bg-primary/5 border-primary/20">
+                        <CardContent className="p-3">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <div className="w-9 h-9 bg-primary/10 rounded-full flex items-center justify-center">
+                                <User className="w-4 h-4 text-primary" />
                               </div>
                               <div>
-                                <div className="font-bold text-gray-900">
+                                <div className="text-sm font-medium">
                                   {selectedPatient.name}
                                 </div>
-                                <div className="text-sm text-gray-600">
+                                <div className="text-xs text-muted-foreground">
                                   {selectedPatient.phone}
                                 </div>
                               </div>
@@ -332,7 +350,7 @@ export default function AppointmentCreateDialog({ open, onClose }) {
                               variant="ghost"
                               size="sm"
                               onClick={() => setSelectedPatient(null)}
-                              className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                              className="h-7 text-xs"
                             >
                               تغيير
                             </Button>
@@ -343,26 +361,28 @@ export default function AppointmentCreateDialog({ open, onClose }) {
                   </div>
 
                   {/* اختيار الموعد */}
-                  <div className="space-y-4" style={{ direction: 'rtl' }}>
-                    <div className="flex items-center justify-between" style={{ direction: 'rtl' }}>
-                      <h3 className="font-semibold text-gray-900 text-lg"  style={{ direction: 'rtl' }}>
-                        ٢. تحديد الموعد
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-sm font-medium text-foreground flex items-center gap-2">
+                        <Calendar className="w-4 h-4 text-primary" />
+                        تحديد الموعد
                       </h3>
                       {selectedTime && (
-                        <Badge className="bg-blue-500 text-white text-xs" style={{ direction: 'rtl' }}>
-                           تم التحديد
+                        <Badge variant="default" className="text-xs">
+                          تم
                         </Badge>
                       )}
                     </div>
 
                     {/* التقويم واختيار الوقت */}
-                    <div className="bg-gray-50 rounded-lg p-4">
+                    <div className="rounded-lg border border-border overflow-hidden">
                       <AppointmentTimePicker
                         selectedDate={selectedDate}
-                        onDateChange={setSelectedDate}
+                        onDateChange={handleDateChange}
                         selectedTime={selectedTime}
-                        onTimeChange={setSelectedTime}
+                        onTimeChange={handleTimeChange}
                         clinicAvailableTime={clinicData?.available_time}
+                        autoSelectFirstAvailable={autoSelectEnabled}
                         className="w-full"
                         mobileView={true}
                       />
@@ -370,21 +390,21 @@ export default function AppointmentCreateDialog({ open, onClose }) {
 
                     {/* الموعد المختار */}
                     {selectedDate && selectedTime && (
-                      <Card className="bg-blue-50 border-blue-200"  style={{ direction: 'rtl' }}>
-                        <CardContent className="p-3" style={{ direction: 'rtl' }}>
-                          <div className="flex items-center justify-between" style={{ direction: 'rtl' }}>
-                            <div className="flex items-center gap-3" style={{ direction: 'rtl' }}>
-                              <Calendar className="w-5 h-5 text-blue-600"  style={{ direction: 'rtl' }}/>
+                      <Card className="bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800">
+                        <CardContent className="p-3">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <Clock className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                               <div>
-                                <div className="font-bold text-gray-900" style={{ direction: 'rtl' }}>
+                                <div className="text-sm font-medium">
                                   {new Date(selectedDate).toLocaleDateString('ar-SA', {
-                                    weekday: 'long',
-                                    month: 'long',
+                                    weekday: 'short',
+                                    month: 'short',
                                     day: 'numeric'
                                   })}
                                 </div>
-                                <div className="text-sm text-gray-600" style={{ direction: 'rtl' }}>
-                                  الساعة {selectedTime}
+                                <div className="text-xs text-muted-foreground">
+                                  {selectedTime}
                                 </div>
                               </div>
                             </div>
@@ -395,9 +415,9 @@ export default function AppointmentCreateDialog({ open, onClose }) {
                               onClick={() => {
                                 setSelectedDate(null);
                                 setSelectedTime(null);
+                                setAutoSelectEnabled(true);
                               }}
-                              style={{ direction: 'rtl' }}
-                              className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                              className="h-7 text-xs"
                             >
                               تغيير
                             </Button>
@@ -408,21 +428,20 @@ export default function AppointmentCreateDialog({ open, onClose }) {
                   </div>
 
                   {/* زر التالي */}
-                  <div className="pt-4" style={{ direction: 'rtl' }}>
+                  <div className="pt-2">
                     <Button
                       type="button"
-                      style={{ direction: 'rtl' }}
                       onClick={() => setStep(2)}
                       disabled={!canProceedToStep2}
-                      className="w-full bg-primary hover:bg-primary/90 h-12 text-base disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="w-full h-10 disabled:opacity-50"
                     >
                       {canProceedToStep2 ? (
                         <>
                           التالي
-                          <ArrowLeft className="w-4 h-4 mr-2" style={{ direction: 'rtl' }}/>
+                          <ArrowLeft className="w-4 h-4 mr-2" />
                         </>
                       ) : (
-                        "اختر المريض والموعد أولاً"
+                        "اختر المريض والموعد"
                       )}
                     </Button>
                   </div>
@@ -431,80 +450,60 @@ export default function AppointmentCreateDialog({ open, onClose }) {
 
               {/* الخطوة 2: السعر ونوع الحجز */}
               {step === 2 && (
-                <div className="space-y-6"  style={{ direction: 'rtl' }}>
-                  <div className="flex items-center gap-2" style={{ direction: 'rtl' }}>
-                    <h3 className="font-semibold text-gray-900 text-lg"  style={{ direction: 'rtl' }}>
-                      الخطوة الثانية: تفاصيل الحجز
-                    </h3>
+                <div className="space-y-5">
+                  <div className="flex items-center gap-2">
                     <Button
                       type="button"
                       variant="ghost"
                       size="icon"
                       onClick={() => setStep(1)}
-                      className="h-8 w-8 rounded-full hover:bg-gray-100"
-                       style={{ direction: 'rtl' }}
+                      className="h-8 w-8 rounded-lg"
                     >
                       <ArrowRight className="w-4 h-4" />
                     </Button>
+                    <h3 className="text-sm font-medium text-foreground">
+                      تفاصيل الحجز
+                    </h3>
                   </div>
 
-                  {/* ملخص سريع */}
-                  {/* <Card className="bg-gray-50 border-gray-200"  style={{ direction: 'rtl' }}>
-                    <CardContent className="p-4" style={{ direction: 'rtl' }}>
-                      <div className="space-y-3 text-sm" style={{ direction: 'rtl' }}>
-                        <div className="flex justify-between items-center" style={{ direction: 'rtl' }}>
-                          <span className="text-gray-600" style={{ direction: 'rtl' }}>المريض:</span>
-                          <span className="font-semibold"  style={{ direction: 'rtl' }}>{selectedPatient?.name}</span>
-                        </div>
-                        <div className="flex justify-between items-center" style={{ direction: 'rtl' }}>
-                          <span className="text-gray-600" style={{ direction: 'rtl' }}>الموعد:</span>
-                          <span className="font-semibold text-right" style={{ direction: 'rtl' }}>
-                            {selectedDate && new Date(selectedDate).toLocaleDateString('ar-SA')}
-                            <br />
-                            <span className="text-gray-600" style={{ direction: 'rtl' }}>الساعة {selectedTime}</span>
-                          </span>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card> */}
-
                   {/* السعر */}
-                  <div className="space-y-2" style={{ direction: 'rtl' }}>
-                    <Label className="text-sm font-medium text-gray-900" style={{ direction: 'rtl' }}>
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium flex items-center gap-2">
+                      <DollarSign className="w-4 h-4 text-primary" />
                       سعر الحجز
                     </Label>
-                    <div className="relative" style={{ direction: 'rtl' }}>
+                    <div className="relative">
                       <Input
                         type="number"
                         step="0.01"
                         min="0"
-                        className="text-base border-gray-300 focus:border-primary h-11 pr-3"
+                        className="h-10 pr-3"
                         placeholder="0.00"
                         {...register("price", {
                           required: "يرجى إدخال السعر",
                           min: { value: 0, message: "يجب أن يكون السعر موجباً" },
                         })}
-                        style={{ direction: 'rtl' }}
                       />
-                      <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500"  style={{ direction: 'rtl' }}>
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
                         جنيه
                       </span>
                     </div>
                     {errors.price && (
-                      <p className="text-sm text-red-500 mt-1">
+                      <p className="text-xs text-red-500">
                         {errors.price.message}
                       </p>
                     )}
                   </div>
 
                   {/* نوع الحجز */}
-                  <div className="space-y-2" style={{ direction: 'rtl' }}>
-                    <Label className="text-sm font-medium text-gray-900" style={{ direction: 'rtl' }}>
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium flex items-center gap-2">
+                      <FileText className="w-4 h-4 text-primary" />
                       نوع الحجز
                     </Label>
                     <Textarea
-                      className="border-gray-300 focus:border-primary min-h-[100px] text-base"
-                      placeholder="أدخل نوع الحجز (مثال: كشف أولي، متابعة...)"
+                      className="min-h-[80px] resize-none"
+                      placeholder="مثال: كشف أولي، متابعة..."
                       {...register("notes", { 
                         required: "يرجى إدخال نوع الحجز",
                         maxLength: {
@@ -512,27 +511,25 @@ export default function AppointmentCreateDialog({ open, onClose }) {
                           message: "يجب ألا يتجاوز 100 حرف"
                         }
                       })}
-                      style={{ direction: 'rtl' }}
                     />
                     {errors.notes && (
-                      <p className="text-sm text-red-500 mt-1"  style={{ direction: 'rtl' }}>
+                      <p className="text-xs text-red-500">
                         {errors.notes.message}
                       </p>
                     )}
                     
                     {/* الخيارات السريعة */}
-                    <div className="flex flex-wrap gap-2 mt-2"  style={{ direction: 'rtl' }}>
+                    <div className="flex flex-wrap gap-2">
                       {['كشف أولي', 'متابعة', 'استشارة', 'فحص', 'علاج'].map((type) => (
                         <button
                           key={type}
                           type="button"
                           onClick={() => handleQuickAppointmentType(type)}
-                          className={`px-3 py-1.5 border rounded-lg text-sm transition-colors ${
+                          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
                             watchNotes === type 
-                              ? 'bg-primary text-white border-primary' 
-                              : 'bg-white border-gray-300 hover:border-primary'
+                              ? 'bg-primary text-white shadow-sm' 
+                              : 'bg-muted hover:bg-muted/80'
                           }`}
-                         style={{ direction: 'rtl' }}
                         >
                           {type}
                         </button>
@@ -540,46 +537,13 @@ export default function AppointmentCreateDialog({ open, onClose }) {
                     </div>
                   </div>
 
-                  {/* الملخص النهائي */}
-                  {/* <Card className="bg-primary/5 border-primary/20" style={{ direction: 'rtl' }}>
-                    <CardContent className="p-4" style={{ direction: 'rtl' }}>
-                      <h4 className="font-semibold text-gray-900 text-sm mb-3" style={{ direction: 'rtl' }}>
-                        ملخص الحجز
-                      </h4>
-                      <div className="space-y-2 text-sm" style={{ direction: 'rtl' }}>
-                        <div className="flex justify-between" style={{ direction: 'rtl' }}>
-                          <span className="text-gray-600" style={{ direction: 'rtl' }}>المريض:</span>
-                          <span className="font-medium" style={{ direction: 'rtl' }}>{selectedPatient?.name}</span>
-                        </div>
-                        <div className="flex justify-between" style={{ direction: 'rtl' }}>
-                          <span className="text-gray-600" style={{ direction: 'rtl' }}>الموعد:</span>
-                          <span className="font-medium" style={{ direction: 'rtl' }}>
-                            {selectedDate && new Date(selectedDate).toLocaleDateString('ar-SA')}
-                            <br />
-                            <span className="text-gray-600" style={{ direction: 'rtl' }}>الساعة {selectedTime}</span>
-                          </span>
-                        </div>
-                        <div className="flex justify-between" style={{ direction: 'rtl' }}>
-                          <span className="text-gray-600" style={{ direction: 'rtl' }}>السعر:</span>
-                          <span className="font-medium text-primary" style={{ direction: 'rtl' }}>
-                            {watchPrice ? `${watchPrice} جنيه` : '0 جنيه'}
-                          </span>
-                        </div>
-                        <div className="flex justify-between" style={{ direction: 'rtl' }}>
-                          <span className="text-gray-600" style={{ direction: 'rtl' }}>النوع:</span>
-                          <span className="font-medium" style={{ direction: 'rtl' }}>{watchNotes || '---'}</span>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card> */}
-
                   {/* أزرار الإجراءات */}
-                  <div className="flex gap-3 pt-4 pb-0" style={{ direction: 'rtl' }}>
+                  <div className="flex gap-3 pt-3">
                     <Button
                       type="button"
                       variant="outline"
                       onClick={() => setStep(1)}
-                      className="flex-1 border-gray-300 hover:bg-gray-50 h-11"
+                      className="flex-1 h-10"
                     >
                       <ArrowRight className="w-4 h-4 ml-2" />
                       رجوع
@@ -588,30 +552,28 @@ export default function AppointmentCreateDialog({ open, onClose }) {
                       type="button"
                       disabled={isPending}
                       onClick={async () => {
-                        // Trigger form submission manually with validation
                         const isValid = await trigger(["price", "notes"]);
                         if (isValid) {
-                          // Directly call onSubmit since we're handling validation here
                           const formData = {
                             price: watchPrice,
                             notes: watchNotes
                           };
                           onSubmit(formData);
                         } else {
-                          toast.error("يرجى ملء جميع الحقول المطلوبة");
+                          toast.error("يرجى ملء جميع الحقول");
                         }
                       }}
-                      className="flex-1 bg-primary hover:bg-primary/90 h-11"
+                      className="flex-1 h-10"
                     >
                       {isPending ? (
                         <>
                           <Loader2 className="w-4 h-4 animate-spin ml-2" />
-                          جاري الإضافة...
+                          جاري...
                         </>
                       ) : (
                         <>
                           <Check className="w-4 h-4 ml-2" />
-                          إضافة الموعد
+                          حجز الموعد
                         </>
                       )} 
                     </Button>

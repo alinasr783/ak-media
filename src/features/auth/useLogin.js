@@ -17,7 +17,8 @@ export default function useLogin() {
             navigate("/dashboard", { replace: true })
         },
         onError: (error) => {
-            toast.error(error.message || "فشل تسجيل الدخول")
+            // Error messages are already in Egyptian Arabic from apiAuth.js
+            toast.error(error.message || "حصل خطأ في تسجيل الدخول")
         },
     })
 }

@@ -19,46 +19,55 @@ export default function SecretaryPermissionsDialog({
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent dir="rtl" className="max-w-md">
+      <DialogContent dir="rtl" className="max-w-2xl max-h-[90vh] overflow-hidden">
         <DialogHeader>
-          <DialogTitle>تعديل صلاحيات السكرتير</DialogTitle>
+          <DialogTitle>تعديل صلاحيات {secretary?.name || 'الموظف'}</DialogTitle>
         </DialogHeader>
-        <div className="space-y-4">
-          <div>
-            <h4 className="font-medium mb-2">الصلاحيات المتوفرة</h4>
-            <div className="space-y-3">
+        
+        <div className="overflow-y-auto max-h-[calc(90vh-12rem)] pr-2" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+          <style>
+            {`
+              .overflow-y-auto::-webkit-scrollbar {
+                display: none;
+              }
+            `}
+          </style>
+          
+          <div className="space-y-3 py-2">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {SECRETARY_PERMISSIONS.map((permission) => (
-                <div key={permission.id} className="flex items-start gap-3">
+                <div key={permission.id} className="flex items-start gap-3 p-3 rounded-lg border border-border/50 bg-muted/20">
                   <Checkbox
                     id={permission.id}
-                    className="mt-1"
                     checked={selectedPermissions.includes(permission.id)}
                     onCheckedChange={() => onPermissionChange(permission.id)}
+                    className="mt-0.5"
                   />
-                  <div className="grid gap-1">
+                  <div className="flex-1">
                     <label htmlFor={permission.id} className="text-sm font-medium leading-none cursor-pointer">
                       {permission.label}
                     </label>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-xs text-muted-foreground mt-0.5">
                       {permission.description}
                     </p>
                   </div>
                 </div>
               ))}
             </div>
-            <div className="mt-4 p-3 bg-muted rounded-lg">
-              <p className="text-sm text-muted-foreground">
-                ملاحظة: صفحة الإعدادات متاحة دائماً للسكرتير كونها تحتوي على
-                معلومات حسابه الشخصي
+            
+            <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+              <p className="text-xs text-blue-900 dark:text-white">
+                ملاحظة: صفحة الإعدادات متاحة دائماً للموظف
               </p>
             </div>
           </div>
-          <div className="flex justify-end gap-2 pt-4">
-            <Button variant="outline" onClick={() => onOpenChange(false)}>
-              إلغاء
-            </Button>
-            <Button onClick={onSave}>حفظ التغييرات</Button>
-          </div>
+        </div>
+        
+        <div className="flex justify-end gap-2 pt-4">
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            إلغاء
+          </Button>
+          <Button onClick={onSave}>حفظ التغييرات</Button>
         </div>
       </DialogContent>
     </Dialog>

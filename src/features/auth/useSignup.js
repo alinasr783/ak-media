@@ -14,12 +14,13 @@ export default function useSignup() {
             queryClient.setQueryData(["user"], data.user)
             queryClient.invalidateQueries({ queryKey: ["user"] })
             toast.success(
-                "تم إنشاء الحساب بنجاح."
+                "تم إنشاء الحساب بنجاح"
             )
             navigate("/dashboard", { replace: true })
         },
         onError: (error) => {
-            toast.error(error.message || "فشل إنشاء الحساب")
+            // Error messages are already in Egyptian Arabic from apiAuth.js
+            toast.error(error.message || "حصل خطأ في إنشاء الحساب")
         },
     })
 }

@@ -435,8 +435,11 @@ export async function getAppointmentById(id) {
 
 // New function to subscribe to real-time appointment changes
 export function subscribeToAppointments(callback, clinicId, sourceFilter = null) {
+    const channelName = `appointments-${clinicId}${sourceFilter ? `-${sourceFilter}` : ''}`;
+    console.log('Creating subscription channel:', channelName);
+    
     let query = supabase
-        .channel('appointments-changes')
+        .channel(channelName)
         .on(
             'postgres_changes',
             {
@@ -446,18 +449,22 @@ export function subscribeToAppointments(callback, clinicId, sourceFilter = null)
                 filter: `clinic_id=eq.${clinicId}`
             },
             (payload) => {
+                console.log('Appointment change received:', payload);
                 // If source filter is specified, only trigger callback for matching source
-                if (!sourceFilter || payload.new.from === sourceFilter || payload.old?.from === sourceFilter) {
+                if (!sourceFilter || payload.new?.from === sourceFilter || payload.old?.from === sourceFilter) {
                     callback(payload);
                 }
             }
         );
     
     // Subscribe to the channel
-    const subscription = query.subscribe();
+    const subscription = query.subscribe((status) => {
+        console.log('Subscription status for', channelName, ':', status);
+    });
     
     // Return unsubscribe function
     return () => {
+        console.log('Unsubscribing from', channelName);
         supabase.removeChannel(subscription);
     };
 }
