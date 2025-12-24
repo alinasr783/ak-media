@@ -24,7 +24,7 @@ export default function OfflineIndicator() {
   
   const [isVisible, setIsVisible] = useState(false);
   const [showOnlineMessage, setShowOnlineMessage] = useState(false);
-  const [hasBeenOffline, setHasBeenOffline] = useState(false); // Track if we've been offline before
+  const [hasBeenOffline, setHasBeenOffline] = useState(false);
 
   useEffect(() => {
     // Show indicator when offline or syncing
