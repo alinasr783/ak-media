@@ -24,6 +24,7 @@ export default function OfflineIndicator() {
   
   const [isVisible, setIsVisible] = useState(false);
   const [showOnlineMessage, setShowOnlineMessage] = useState(false);
+  const [hasBeenOffline, setHasBeenOffline] = useState(false); // Track if we've been offline before
 
   useEffect(() => {
     // Show indicator when offline or syncing
@@ -32,22 +33,32 @@ export default function OfflineIndicator() {
       return;
     }
     
+    // Track when we go offline
+    if (!isOnline) {
+      setHasBeenOffline(true);
+    }
+    
     if (!isOnline || isSyncing) {
       setIsVisible(true);
       setShowOnlineMessage(false);
     } else {
-      // When back online, show success message for 3 seconds then hide
-      setShowOnlineMessage(true);
-      setIsVisible(true);
-      
-      const timer = setTimeout(() => {
+      // Only show "back online" message if we've been offline before
+      if (hasBeenOffline) {
+        setShowOnlineMessage(true);
+        setIsVisible(true);
+        
+        const timer = setTimeout(() => {
+          setIsVisible(false);
+          setShowOnlineMessage(false);
+        }, 3000);
+        
+        return () => clearTimeout(timer);
+      } else {
+        // First load - don't show anything
         setIsVisible(false);
-        setShowOnlineMessage(false);
-      }, 3000);
-      
-      return () => clearTimeout(timer);
+      }
     }
-  }, [isOnline, isSyncing, hasOfflineContext]);
+  }, [isOnline, isSyncing, hasOfflineContext, hasBeenOffline]);
 
   if (!isVisible) return null;
 
