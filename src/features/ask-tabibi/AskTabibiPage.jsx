@@ -22,7 +22,8 @@ import { Card } from "../../components/ui/card";
 import { useChat } from "./useChat";
 import { useAuth } from "../auth/AuthContext";
 import { getCurrentClinic } from "../../services/apiClinic";
-import { toggleOnlineBooking } from "../../services/apiAskTabibi";
+import { toggleOnlineBooking, changeThemeMode, reorderMenuItem, resetToDefaultSettings, changeColors } from "../../services/apiAskTabibi";
+import { useUserPreferencesContext } from "../user-preferences/UserPreferencesProvider";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { cn } from "../../lib/utils";
 import { format } from "date-fns";
@@ -177,7 +178,8 @@ function ChatInput({ onSend, disabled }) {
         )}
         
 
-        <div className="flex items-end gap-1.5 sm:gap-2 bg-card rounded-2xl border border-border/60 shadow-sm p-1.5 sm:p-2 px-2 sm:px-3 py-1.5 sm:py-2.5 w-[95%]">
+
+        <div className="flex items-end gap-1.5 sm:gap-2 bg-card rounded-2xl border border-border/60 shadow-sm p-1.5 sm:p-2 px-2 sm:px-3 py-1.5 sm:py-2.5 w-[95%] mb-[8px]">
           <textarea
             ref={textareaRef}
             value={message}
@@ -412,6 +414,7 @@ export default function AskTabibiPage() {
   const queryClient = useQueryClient();
   
   const { user } = useAuth();
+  const { applyColors, applyThemeMode } = useUserPreferencesContext();
   
   const {
     activeConversationId,
@@ -502,7 +505,11 @@ export default function AskTabibiPage() {
     // Handle executable actions
     if (actionType === "action") {
       try {
-        switch (actionData) {
+        // actionData is now the full action object with { action: "actionName", data: {...} }
+        const actionName = typeof actionData === 'string' ? actionData : actionData?.action;
+        const data = typeof actionData === 'object' ? actionData?.data : undefined;
+        
+        switch (actionName) {
           case "enableOnlineBooking":
             await toggleOnlineBooking(true);
             toast.success("تم تفعيل الحجز الإلكتروني");
@@ -526,16 +533,60 @@ export default function AskTabibiPage() {
               toast.error("مش لاقي رابط الحجز");
             }
             break;
+          
+          case "changeTheme": {
+            const mode = data?.mode || 'dark';
+            const result = await changeThemeMode(mode);
+            // Apply theme immediately without reload
+            applyThemeMode(mode);
+            toast.success(result.message);
+            break;
+          }
+          
+          case "reorderMenu": {
+            const { itemId, position } = data || {};
+            if (!itemId || !position) {
+              toast.error("بيانات غير كاملة");
+              break;
+            }
+            const result = await reorderMenuItem(itemId, position);
+            toast.success(result.message);
+            // Reload page to apply menu order
+            setTimeout(() => window.location.reload(), 500);
+            break;
+          }
+          
+          case "resetSettings": {
+            const result = await resetToDefaultSettings();
+            // Apply default colors and theme immediately
+            applyColors('#1AA19C', '#224FB5', '#FF6B6B');
+            applyThemeMode('system');
+            toast.success(result.message);
+            break;
+          }
+          
+          case "changeColors": {
+            const { primary, secondary, accent } = data || {};
+            if (!primary) {
+              toast.error("بيانات الألوان غير كاملة");
+              break;
+            }
+            const result = await changeColors(primary, secondary, accent);
+            // Apply colors immediately without reload
+            applyColors(primary, secondary, accent);
+            toast.success(result.message);
+            break;
+          }
             
           default:
-            console.log("Unknown action:", actionData);
+            console.log("Unknown action:", actionName, data);
         }
       } catch (error) {
         console.error("Action error:", error);
         toast.error(error.message || "حصل مشكلة");
       }
     }
-  }, [navigate, queryClient, clinicData]);
+  }, [navigate, queryClient, clinicData, applyColors, applyThemeMode]);
   
   return (
     <div className="h-[100dvh] md:h-[calc(100vh-6rem)] flex flex-col -m-6 md:-m-0 overflow-hidden">

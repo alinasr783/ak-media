@@ -3,6 +3,7 @@ import { Toaster } from "react-hot-toast";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import DoctorLayout from "./components/layout/DoctorLayout";
 import { AuthProviderWrapper } from "./features/auth/AuthProviderWrapper";
+import { UserPreferencesProvider } from "./features/user-preferences/UserPreferencesProvider";
 import AutoPaymentRecorder from "./features/finance/AutoPaymentRecorder";
 import PermissionGuard from "./features/auth/PermissionGuard";
 import ProtectedRoute from "./features/auth/ProtectedRoute";
@@ -263,13 +264,15 @@ function App() {
   return (
     <BrowserRouter>
       <AuthProviderWrapper>
-        <OfflineProvider>
-          <AutoPaymentRecorder />
-          <OfflineIndicator />
-          <PWAInstallPrompt />
-          <AppRoutes />
-          <Toaster position="top-center" />
-        </OfflineProvider>
+        <UserPreferencesProvider>
+          <OfflineProvider>
+            <AutoPaymentRecorder />
+            <OfflineIndicator />
+            <PWAInstallPrompt />
+            <AppRoutes />
+            <Toaster position="top-center" />
+          </OfflineProvider>
+        </UserPreferencesProvider>
       </AuthProviderWrapper>
     </BrowserRouter>
   );

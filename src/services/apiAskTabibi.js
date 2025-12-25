@@ -1,7 +1,8 @@
 import supabase from "./supabase";
 import { getDashboardStats } from "./apiDashboard";
+import { updateUserPreferences, getUserPreferences } from "./apiUserPreferences";
 
-const OPENROUTER_API_KEY = "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";
+const OPENROUTER_API_KEY = "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";
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 const AI_MODEL = "deepseek/deepseek-v3.2";
 
@@ -31,7 +32,7 @@ async function getPatientsData() {
     // Get recent patients with details
     const { data: patients } = await supabase
       .from('patients')
-      .select('id, name, phone, age, gender, notes, created_at')
+      .select('id, name, phone, age, gender, address, created_at')
       .eq('clinic_id', clinicId)
       .order('created_at', { ascending: false })
       .limit(20);
@@ -60,7 +61,7 @@ async function getPatientsData() {
         name: p.name,
         phone: p.phone,
         age: p.age,
-        notes: p.notes?.substring(0, 50) || ''
+        address: p.address?.substring(0, 50) || ''
       }))
     };
   } catch (error) {
@@ -279,12 +280,13 @@ async function getFinanceData() {
 
     const { data: userData } = await supabase
       .from('users')
-      .select('clinic_id')
+      .select('clinic_id, clinic_id_bigint')
       .eq('user_id', session.user.id)
       .single();
 
-    const clinicId = userData?.clinic_id;
-    if (!clinicId) return null;
+    // financial_records uses bigint clinic_id
+    const clinicIdBigint = userData?.clinic_id_bigint;
+    if (!clinicIdBigint) return null;
 
     const today = new Date();
     const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
@@ -294,7 +296,7 @@ async function getFinanceData() {
     const { data: monthRecords } = await supabase
       .from('financial_records')
       .select('id, amount, type, description, created_at')
-      .eq('clinic_id', clinicId)
+      .eq('clinic_id', clinicIdBigint)
       .gte('created_at', startOfMonth.toISOString())
       .order('created_at', { ascending: false });
 
@@ -310,7 +312,7 @@ async function getFinanceData() {
     const { data: yearRecords } = await supabase
       .from('financial_records')
       .select('amount, type, created_at')
-      .eq('clinic_id', clinicId)
+      .eq('clinic_id', clinicIdBigint)
       .gte('created_at', startOfYear.toISOString());
 
     const yearlyIncome = (yearRecords || []).filter(r => r.type === 'income' || r.amount > 0)
@@ -410,10 +412,10 @@ async function getPatientPlansData() {
     const clinicId = userData?.clinic_id;
     if (!clinicId) return null;
 
-    // Get patient plans
+    // Get patient plans with template name
     const { data: plans, count } = await supabase
       .from('patient_plans')
-      .select('id, name, total_sessions, completed_sessions, status, patient:patients(name)', { count: 'exact' })
+      .select('id, total_sessions, completed_sessions, status, patient:patients(name), template:treatment_templates(name)', { count: 'exact' })
       .eq('clinic_id', clinicId)
       .order('created_at', { ascending: false })
       .limit(20);
@@ -426,7 +428,7 @@ async function getPatientPlansData() {
       active,
       completed,
       plans: (plans || []).slice(0, 10).map(p => ({
-        name: p.name,
+        name: p.template?.name || 'خطة علاجية',
         patientName: p.patient?.name || 'غير معروف',
         totalSessions: p.total_sessions,
         completedSessions: p.completed_sessions,
@@ -458,7 +460,7 @@ async function getTreatmentTemplatesData() {
 
     const { data: templates, count } = await supabase
       .from('treatment_templates')
-      .select('id, name, description, total_sessions, session_price, created_at', { count: 'exact' })
+      .select('id, name, description, session_count, session_price, created_at', { count: 'exact' })
       .eq('clinic_id', clinicId)
       .order('created_at', { ascending: false });
 
@@ -467,7 +469,7 @@ async function getTreatmentTemplatesData() {
       templates: (templates || []).slice(0, 10).map(t => ({
         name: t.name,
         description: t.description?.substring(0, 50) || '',
-        totalSessions: t.total_sessions,
+        totalSessions: t.session_count,
         session_price: t.session_price
       }))
     };
@@ -1117,6 +1119,10 @@ const getSystemPrompt = (userData, clinicData, subscriptionData, statsData, allD
 - enableOnlineBooking: تفعيل الحجز الإلكتروني
 - disableOnlineBooking: إيقاف الحجز الإلكتروني
 - copyBookingLink: نسخ رابط الحجز
+- changeTheme: تغيير المظهر (data: {mode: "dark"/"light"/"system"})
+- changeColors: تغيير الألوان (data: {primary: "#hex", secondary: "#hex", accent: "#hex"})
+- reorderMenu: تغيير ترتيب المنيو (data: {itemId: "id", position: number})
+- resetSettings: إعادة كل الإعدادات للوضع الافتراضي
 
 ## أمثلة:
 
@@ -1191,6 +1197,98 @@ ${onlineBookingEnabled ? '[icon:CheckCircle] الحجز الإلكتروني **�
 \`\`\`
 \`\`\`action
 {"type": "button", "label": "فتح صفحة الحجز", "navigate": "/online-booking", "icon": "ExternalLink"}
+\`\`\`
+
+## قدرات التخصيص والإعدادات:
+
+### لما حد عايز يغير الألوان:
+- لو قال "عايز اللون الأحمر" أو "غير اللون للأحمر" أو "بحب الأحمر":
+[icon:Palette] تمام! هغير ألوان الموقع للون الأحمر ودرجاته دلوقتي 🎨
+\`\`\`action
+{"type": "button", "label": "تغيير للون الأحمر", "action": "changeColors", "data": {"primary": "#E53935", "secondary": "#C62828", "accent": "#FF5252"}, "icon": "Palette"}
+\`\`\`
+
+- لو قال "عايز اللون الأزرق" أو "غير للأزرق":
+[icon:Palette] تمام! هغير ألوان الموقع للون الأزرق ودرجاته دلوقتي
+\`\`\`action
+{"type": "button", "label": "تغيير للون الأزرق", "action": "changeColors", "data": {"primary": "#1976D2", "secondary": "#1565C0", "accent": "#42A5F5"}, "icon": "Palette"}
+\`\`\`
+
+- لو قال "عايز اللون الأخضر" أو "غير للأخضر":
+[icon:Palette] تمام! هغير ألوان الموقع للون الأخضر ودرجاته دلوقتي
+\`\`\`action
+{"type": "button", "label": "تغيير للون الأخضر", "action": "changeColors", "data": {"primary": "#43A047", "secondary": "#2E7D32", "accent": "#66BB6A"}, "icon": "Palette"}
+\`\`\`
+
+- لو قال "عايز اللون البنفسجي" أو "غير للبنفسجي":
+[icon:Palette] تمام! هغير ألوان الموقع للون البنفسجي ودرجاته دلوقتي
+\`\`\`action
+{"type": "button", "label": "تغيير للون البنفسجي", "action": "changeColors", "data": {"primary": "#7B1FA2", "secondary": "#6A1B9A", "accent": "#AB47BC"}, "icon": "Palette"}
+\`\`\`
+
+- لو قال "عايز اللون البرتقالي" أو "غير للبرتقالي":
+[icon:Palette] تمام! هغير ألوان الموقع للون البرتقالي ودرجاته دلوقتي
+\`\`\`action
+{"type": "button", "label": "تغيير للون البرتقالي", "action": "changeColors", "data": {"primary": "#FB8C00", "secondary": "#EF6C00", "accent": "#FFB74D"}, "icon": "Palette"}
+\`\`\`
+
+- لو قال "عايز اللون الوردي" أو "غير للوردي" أو "pink":
+[icon:Palette] تمام! هغير ألوان الموقع للون الوردي ودرجاته دلوقتي
+\`\`\`action
+{"type": "button", "label": "تغيير للون الوردي", "action": "changeColors", "data": {"primary": "#EC407A", "secondary": "#D81B60", "accent": "#F48FB1"}, "icon": "Palette"}
+\`\`\`
+
+- لو قال "عايز اللون الفيروزي" أو "teal" أو "اللون الأصلي":
+[icon:Palette] تمام! هغير ألوان الموقع للون الفيروزي (اللون الأصلي) دلوقتي
+\`\`\`action
+{"type": "button", "label": "تغيير للون الفيروزي", "action": "changeColors", "data": {"primary": "#1AA19C", "secondary": "#224FB5", "accent": "#FF6B6B"}, "icon": "Palette"}
+\`\`\`
+
+**ملاحظة مهمة:** لو طلب لون معين، نفذ مباشرة بزرار - متشرحش أزاي يغير من الإعدادات.
+
+### لما حد عايز يغير المظهر:
+- لو قال "غير للوضع الليلي" أو "وضع ليلي" أو "dark mode" أو "عايز الموقع يبقى دارك":
+[‪icon:Moon] تمام! هغير المظهر للوضع الليلي دلوقتي
+\`\`\`action
+{"type": "button", "label": "تغيير للوضع الليلي", "action": "changeTheme", "data": {"mode": "dark"}, "icon": "Moon"}
+\`\`\`
+
+- لو قال "غير للوضع النهاري" أو "وضع نهاري" أو "light mode" أو "عايز الموقع يبقى فاتح":
+[icon:Sun] تمام! هغير المظهر للوضع النهاري دلوقتي
+\`\`\`action
+{"type": "button", "label": "تغيير للوضع النهاري", "action": "changeTheme", "data": {"mode": "light"}, "icon": "Sun"}
+\`\`\`
+
+- لو قال "وضع تلقائي" أو "system mode" أو "عايز يبقى زي النظام":
+[icon:Monitor] تمام! هغير المظهر للوضع التلقائي (زي النظام)
+\`\`\`action
+{"type": "button", "label": "تغيير للوضع التلقائي", "action": "changeTheme", "data": {"mode": "system"}, "icon": "Monitor"}
+\`\`\`
+
+**ملاحظة:** المظهر الحالي يتغير فوراً بدون إعادة تحميل الصفحة.
+
+### لما حد عايز يغير ترتيب المنيو:
+- لو قال "عايز زرار العيادة يكون فوق زرار المرضى" أو "ضع العيادة أول":
+[icon:Menu] تمام! هغير ترتيب المنيو دلوقتي
+\`\`\`action
+{"type": "button", "label": "ضع العيادة في البداية", "action": "reorderMenu", "data": {"itemId": "clinic", "position": 1}, "icon": "ArrowUp"}
+\`\`\`
+
+**عناصر المنيو المتاحة:**
+- dashboard (لوحة التحكم)
+- appointments (المواعيد)
+- patients (المرضى)
+- clinic (العيادة)
+- treatments (الخطط العلاجية)
+- finance (المالية)
+- online-booking (الحجز الإلكتروني)
+- staff (الموظفين)
+- settings (الإعدادات)
+
+### لما حد عايز يرجع للإعدادات الافتراضية:
+[icon:RotateCcw] تمام! هرجع كل الإعدادات للوضع الافتراضي (الألوان، المظهر، وترتيب المنيو)
+\`\`\`action
+{"type": "button", "label": "إعادة للوضع الافتراضي", "action": "resetSettings", "icon": "RotateCcw"}
 \`\`\`
 
 ## تعليمات مهمة:
@@ -1305,6 +1403,111 @@ export async function archiveConversation(conversationId) {
     .eq("id", conversationId);
 
   if (error) throw error;
+}
+
+// ========================
+// وظائف تنفيذ أوامر التخصيص
+// ========================
+
+// تغيير المظهر إلى الوضع الليلي أو النهاري
+export async function changeThemeMode(mode) {
+  try {
+    const validModes = ['light', 'dark', 'system'];
+    if (!validModes.includes(mode)) {
+      throw new Error('وضع غير صحيح');
+    }
+    
+    await updateUserPreferences({ theme_mode: mode });
+    return { success: true, message: `تم التغيير إلى الوضع ${mode === 'dark' ? 'الليلي' : mode === 'light' ? 'النهاري' : 'التلقائي'}` };
+  } catch (error) {
+    console.error('Error changing theme:', error);
+    throw error;
+  }
+}
+
+// تغيير الألوان
+export async function changeColors(primaryColor, secondaryColor, accentColor) {
+  try {
+    const updates = {};
+    if (primaryColor) updates.primary_color = primaryColor;
+    if (secondaryColor) updates.secondary_color = secondaryColor;
+    if (accentColor) updates.accent_color = accentColor;
+    
+    await updateUserPreferences(updates);
+    return { success: true, message: 'تم تغيير الألوان بنجاح' };
+  } catch (error) {
+    console.error('Error changing colors:', error);
+    throw error;
+  }
+}
+
+// تغيير ترتيب عناصر المنيو
+export async function reorderMenuItem(itemId, newPosition) {
+  try {
+    const prefs = await getUserPreferences();
+    let menuItems = prefs?.menu_items || [];
+    
+    // If no custom order exists, create default order
+    if (menuItems.length === 0) {
+      menuItems = [
+        { id: 'dashboard', label: 'لوحة التحكم', order: 1, enabled: true },
+        { id: 'appointments', label: 'المواعيد', order: 2, enabled: true },
+        { id: 'patients', label: 'المرضى', order: 3, enabled: true },
+        { id: 'clinic', label: 'العيادة', order: 4, enabled: true },
+        { id: 'treatments', label: 'الخطط العلاجية', order: 5, enabled: true },
+        { id: 'finance', label: 'المالية', order: 6, enabled: true },
+        { id: 'online-booking', label: 'الحجز الإلكتروني', order: 7, enabled: true },
+        { id: 'staff', label: 'الموظفين', order: 8, enabled: true },
+        { id: 'settings', label: 'الإعدادات', order: 9, enabled: true },
+      ];
+    }
+    
+    // Find the item to move
+    const itemIndex = menuItems.findIndex(item => item.id === itemId);
+    if (itemIndex === -1) {
+      throw new Error('العنصر غير موجود');
+    }
+    
+    // Remove item from current position
+    const [item] = menuItems.splice(itemIndex, 1);
+    
+    // Insert at new position (1-based to 0-based index)
+    menuItems.splice(newPosition - 1, 0, item);
+    
+    // Update order numbers
+    menuItems = menuItems.map((item, index) => ({
+      ...item,
+      order: index + 1
+    }));
+    
+    await updateUserPreferences({ menu_items: menuItems });
+    return { success: true, message: 'تم تغيير ترتيب المنيو بنجاح', menuItems };
+  } catch (error) {
+    console.error('Error reordering menu:', error);
+    throw error;
+  }
+}
+
+// إعادة الإعدادات الافتراضية
+export async function resetToDefaultSettings() {
+  try {
+    const defaultSettings = {
+      theme_mode: 'system',
+      primary_color: '#1AA19C',
+      secondary_color: '#224FB5',
+      accent_color: '#FF6B6B',
+      sidebar_style: 'default',
+      sidebar_collapsed: false,
+      menu_items: [],
+      dashboard_widgets: [],
+    };
+    
+    await updateUserPreferences(defaultSettings);
+    return { success: true, message: 'تم إعادة كل الإعدادات للوضع الافتراضي بنجاح' };
+  } catch (error) {
+    console.error('Error resetting settings:', error);
+    throw error;
+  }
 }
 
 // إرسال رسالة للـ AI

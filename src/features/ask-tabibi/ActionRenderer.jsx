@@ -165,7 +165,11 @@ export const AVAILABLE_COMPONENTS = {
 export const AVAILABLE_ACTIONS = {
   "enableOnlineBooking": "تفعيل الحجز الإلكتروني",
   "disableOnlineBooking": "إيقاف الحجز الإلكتروني",
-  "copyBookingLink": "نسخ رابط الحجز"
+  "copyBookingLink": "نسخ رابط الحجز",
+  "changeTheme": "تغيير المظهر",
+  "reorderMenu": "تغيير ترتيب المنيو",
+  "resetSettings": "إعادة الإعدادات الافتراضية",
+  "changeColors": "تغيير الألوان"
 };
 
 // ========================
@@ -296,7 +300,8 @@ function ActionButton({ action, onAction }) {
       onAction?.("openComponent", action.openComponent);
     } else if (action.action) {
       // Execute an action (enable/disable, copy, etc.)
-      onAction?.("action", action.action);
+      // Pass the FULL action object so data is accessible
+      onAction?.("action", action);
     } else if (action.onClick) {
       onAction?.("custom", action.onClick);
     }

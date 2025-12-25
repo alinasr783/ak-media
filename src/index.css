@@ -187,6 +187,16 @@ body,
   opacity: 0.5;
 }
 
+/* Hide scrollbar utility */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
 /* Mobile input focus fix */
 @media (max-width: 767px) {
   input:focus,
