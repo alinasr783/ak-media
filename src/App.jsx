@@ -35,6 +35,7 @@ import { AskTabibiPage } from "./features/ask-tabibi";
 import OfflineIndicator from "./components/OfflineIndicator";
 import { OfflineProvider } from "./features/offline-mode/OfflineContext";
 import useScrollToTop from "./hooks/useScrollToTop";
+import { PWAInstallPrompt } from "./components/ui/pwa-install";
 
 // Memoize route components to prevent unnecessary re-renders
 const MemoizedLanding = memo(Landing);
@@ -265,6 +266,7 @@ function App() {
         <OfflineProvider>
           <AutoPaymentRecorder />
           <OfflineIndicator />
+          <PWAInstallPrompt />
           <AppRoutes />
           <Toaster position="top-center" />
         </OfflineProvider>
