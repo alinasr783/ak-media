@@ -2,7 +2,7 @@ import supabase from "./supabase";
 import { getDashboardStats } from "./apiDashboard";
 import { updateUserPreferences, getUserPreferences } from "./apiUserPreferences";
 
-const OPENROUTER_API_KEY = "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";
+const OPENROUTER_API_KEY = "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";
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 const AI_MODEL = "deepseek/deepseek-v3.2";
 
