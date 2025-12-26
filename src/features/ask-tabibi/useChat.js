@@ -7,8 +7,10 @@ import {
   sendMessageToAI,
   deleteConversation,
   updateConversationTitle,
-  archiveConversation
+  archiveConversation,
+  executeAIAction
 } from "../../services/apiAskTabibi";
+import { parseAIResponse } from "./ActionRenderer";
 import { useAuth } from "../auth/AuthContext";
 import usePlan from "../auth/usePlan";
 import { useCallback, useState } from "react";
@@ -101,12 +103,14 @@ export function useSendMessage() {
   const { data: planData } = usePlan();
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingContent, setStreamingContent] = useState("");
+  const [executeResults, setExecuteResults] = useState({});
   
   const sendMessage = useCallback(async (conversationId, messageContent, clinicData, deepReasoning = false) => {
     if (!conversationId || !messageContent.trim()) return;
     
     setIsStreaming(true);
     setStreamingContent("");
+    setExecuteResults({});
     
     try {
       // حفظ رسالة المستخدم
@@ -128,6 +132,48 @@ export function useSendMessage() {
         planData,
         deepReasoning
       );
+      
+      // Parse the AI response to extract execute commands
+      const { executeCommands } = parseAIResponse(aiResponse);
+      
+      // Execute any commands automatically
+      if (executeCommands && executeCommands.length > 0) {
+        const results = {};
+        
+        for (const cmd of executeCommands) {
+          const execKey = JSON.stringify(cmd);
+          const actionName = cmd.action;
+          const actionData = cmd.data || {};
+          
+          try {
+            const result = await executeAIAction(actionName, actionData);
+            results[execKey] = { status: 'success', result };
+            
+            // Show success toast
+            if (result?.message) {
+              toast.success(result.message);
+            }
+            
+            // Invalidate relevant queries based on action type
+            if (actionName.includes('Patient')) {
+              queryClient.invalidateQueries({ queryKey: ['patients'] });
+              queryClient.invalidateQueries({ queryKey: ['dashboardStats'] });
+            } else if (actionName.includes('Appointment')) {
+              queryClient.invalidateQueries({ queryKey: ['appointments'] });
+              queryClient.invalidateQueries({ queryKey: ['dashboardStats'] });
+            } else if (actionName.includes('Staff')) {
+              queryClient.invalidateQueries({ queryKey: ['staff'] });
+            } else if (actionName.includes('Clinic') || actionName.includes('Booking')) {
+              queryClient.invalidateQueries({ queryKey: ['clinic'] });
+            }
+          } catch (error) {
+            results[execKey] = { status: 'error', result: { message: error.message } };
+            toast.error(error.message || 'حصل مشكلة');
+          }
+        }
+        
+        setExecuteResults(results);
+      }
       
       // حفظ رد الـ AI
       const assistantMessage = await saveMessage(conversationId, "assistant", aiResponse);
@@ -153,7 +199,8 @@ export function useSendMessage() {
   return {
     sendMessage,
     isStreaming,
-    streamingContent
+    streamingContent,
+    executeResults
   };
 }
 
@@ -167,7 +214,7 @@ export function useChat() {
   const createConversation = useCreateConversation();
   const deleteConversationMutation = useDeleteConversation();
   const archiveConversationMutation = useArchiveConversation();
-  const { sendMessage: sendMessageBase, isStreaming, streamingContent } = useSendMessage();
+  const { sendMessage: sendMessageBase, isStreaming, streamingContent, executeResults } = useSendMessage();
   
   // Wrapped sendMessage that uses active conversation ID
   const sendMessage = useCallback(async (content, clinicData, overrideConversationId = null, deepReasoning = false) => {
@@ -213,6 +260,7 @@ export function useChat() {
     // Streaming
     isStreaming,
     streamingContent,
+    executeResults,
     
     // Mutations loading states
     isCreatingConversation: createConversation.isPending,

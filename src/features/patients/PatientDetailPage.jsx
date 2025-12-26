@@ -28,6 +28,9 @@ import { Eye } from "lucide-react";
 export default function PatientDetailPage() {
   const { id: patientId } = useParams();
   const navigate = useNavigate();
+  
+  // Debug: Log the patientId from the URL
+  console.log("PatientDetailPage - URL patientId:", patientId);
   const location = useLocation();
   const queryClient = useQueryClient();
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
@@ -37,7 +40,7 @@ export default function PatientDetailPage() {
     window.scrollTo(0, 0);
   }, [location.pathname]);
 
-  const { data: patient, isLoading: isPatientLoading } = usePatient(patientId);
+  const { data: patient, isLoading: isPatientLoading, isError } = usePatient(patientId);
   const { data: financialData, isLoading: isFinancialLoading } = usePatientFinancialData(patientId);
   const { data: visits, isLoading: isVisitsLoading } = useVisits(patientId);
   const { data: appointments, isLoading: isAppointmentsLoading } = usePatientAppointments(patientId);
@@ -128,7 +131,21 @@ ${medicationsList}
 
   return (
     <div className="space-y-6" dir="rtl">
-      {isPatientLoading ? (
+      {isError ? (
+        <div className="text-center py-12">
+          <User className="w-12 h-12 text-muted-foreground/50 mx-auto mb-4" />
+          <h2 className="text-xl font-bold text-foreground mb-2">العميل مش موجود</h2>
+          <p className="text-muted-foreground mb-4">العميل اللي بتحاول تشاهده مفيش في قاعدة البيانات</p>
+          <Button
+            variant="outline"
+            onClick={() => navigate(-1)}
+            className="gap-1.5"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            رجوع للصفحة السابقة
+          </Button>
+        </div>
+      ) : isPatientLoading ? (
         <div className="space-y-4">
           <div className="flex items-center gap-4">
             <div className="w-16 h-16 rounded-full bg-muted animate-pulse"></div>
@@ -138,8 +155,21 @@ ${medicationsList}
             </div>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            {[1,2,3,4].map(i => <div key={i} className="h-20 bg-muted rounded-lg animate-pulse"></div>)}
-          </div>
+            {[1,2,3,4].map(i => <div key={i} className="h-20 bg-muted rounded-lg animate-pulse"></div>)}</div>
+        </div>
+      ) : !patient ? (
+        <div className="text-center py-12">
+          <User className="w-12 h-12 text-muted-foreground/50 mx-auto mb-4" />
+          <h2 className="text-xl font-bold text-foreground mb-2">العميل مش موجود</h2>
+          <p className="text-muted-foreground mb-4">العميل اللي بتحاول تشاهده مفيش في قاعدة البيانات</p>
+          <Button
+            variant="outline"
+            onClick={() => navigate(-1)}
+            className="gap-1.5"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            رجوع للصفحة السابقة
+          </Button>
         </div>
       ) : (
         <>
@@ -174,6 +204,7 @@ ${medicationsList}
                 size="sm"
                 onClick={() => setIsEditDialogOpen(true)}
                 className="gap-1.5"
+                disabled={!patient}  // Disable if patient data is not loaded
               >
                 <Edit className="w-4 h-4" />
                 تعديل
@@ -185,6 +216,7 @@ ${medicationsList}
                   size="sm"
                   onClick={shareLatestPrescription}
                   className="gap-1.5"
+                  disabled={!patient}  // Disable if patient data is not loaded
                 >
                   <MessageCircle className="w-4 h-4" />
                   واتساب
@@ -327,7 +359,7 @@ function PatientTreatmentPlansTable({ patientId }) {
         <h3 className="text-sm font-medium text-muted-foreground">الخطط العلاجية</h3>
         <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
           <DropdownMenuTrigger asChild>
-            <Button size="sm" className="gap-1.5">
+            <Button size="sm" className="gap-1.5" disabled={!patientId}>
               <ClipboardList className="w-4 h-4" />
               إضافة خطة
             </Button>

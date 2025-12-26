@@ -22,7 +22,7 @@ import { Card } from "../../components/ui/card";
 import { useChat } from "./useChat";
 import { useAuth } from "../auth/AuthContext";
 import { getCurrentClinic } from "../../services/apiClinic";
-import { toggleOnlineBooking, changeThemeMode, reorderMenuItem, resetToDefaultSettings, changeColors } from "../../services/apiAskTabibi";
+import { toggleOnlineBooking, changeThemeMode, reorderMenuItem, resetToDefaultSettings, changeColors, executeAIAction } from "../../services/apiAskTabibi";
 import { useUserPreferencesContext } from "../user-preferences/UserPreferencesProvider";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { cn } from "../../lib/utils";
@@ -53,7 +53,7 @@ const COMPONENT_MAP = {
 // ========================
 // مكون الرسالة الواحدة مع دعم الـ Actions المضمنة
 // ========================
-function ChatMessage({ message, isStreaming = false, onAction }) {
+function ChatMessage({ message, isStreaming = false, onAction, executeResults = {} }) {
   const isUser = message.role === "user";
   const isAssistant = message.role === "assistant";
   
@@ -91,7 +91,7 @@ function ChatMessage({ message, isStreaming = false, onAction }) {
         <div className="text-[13px] sm:text-sm leading-relaxed">
           {isAssistant ? (
             // Use InlineMessageRenderer for inline actions
-            <InlineMessageRenderer segments={segments} onAction={onAction} />
+            <InlineMessageRenderer segments={segments} onAction={onAction} executeResults={executeResults} />
           ) : (
             <p className="whitespace-pre-wrap">{message.content}</p>
           )}
@@ -409,6 +409,7 @@ export default function AskTabibiPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showAppointmentDialog, setShowAppointmentDialog] = useState(false);
   const [showPatientDialog, setShowPatientDialog] = useState(false);
+  const [lastCreatedPatientId, setLastCreatedPatientId] = useState(null);
   const messagesEndRef = useRef(null);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -427,7 +428,8 @@ export default function AskTabibiPage() {
     removeConversation,
     sendMessage,
     isStreaming,
-    isCreatingConversation
+    isCreatingConversation,
+    executeResults
   } = useChat();
   
   // جلب بيانات العيادة
@@ -471,6 +473,25 @@ export default function AskTabibiPage() {
   const handleAction = useCallback(async (actionType, actionData) => {
     console.log("Action triggered:", actionType, actionData);
     
+    // Handle input submission - send as message to continue the conversation
+    if (actionType === "input") {
+      const { id, value } = actionData;
+      // Format the response based on input type
+      let message = value;
+      if (id === 'patientPhone' || id === 'phone') {
+        message = `رقم الموبايل: ${value}`;
+      } else if (id === 'patientName' || id === 'name') {
+        message = `الاسم: ${value}`;
+      } else if (id === 'date') {
+        message = `التاريخ: ${value}`;
+      } else if (id === 'time') {
+        message = `الوقت: ${value}`;
+      }
+      // Send the input as a regular message
+      handleSendMessage(message);
+      return;
+    }
+    
     // Handle component opening
     if (actionType === "openComponent") {
       const normalizedComponent = COMPONENT_MAP[actionData];
@@ -496,9 +517,24 @@ export default function AskTabibiPage() {
       return;
     }
     
+    // Replace placeholders in navigation path
+    let navigationPath = actionData;
+    if (typeof actionData === 'string') {
+      console.log("Before replacement - actionData:", actionData, "lastCreatedPatientId:", lastCreatedPatientId);
+      
+      // Replace {{patientId}} with actual patient ID if available in context
+      // This would be available after patient creation
+      navigationPath = actionData.replace(/{{patientId}}/g, lastCreatedPatientId || '');
+      
+      // Additional replacements can be added here as needed
+      // For example, if we have other placeholders like {{appointmentId}}
+      
+      console.log("Replaced navigation path:", actionData, "->", navigationPath);
+    }
+    
     // Handle navigation
     if (actionType === "navigate") {
-      navigate(actionData);
+      navigate(navigationPath);
       return;
     }
     
@@ -509,7 +545,27 @@ export default function AskTabibiPage() {
         const actionName = typeof actionData === 'string' ? actionData : actionData?.action;
         const data = typeof actionData === 'object' ? actionData?.data : undefined;
         
+        // Execute the action and capture the result
+        let result;
+        if (actionName === 'createPatientAction') {
+          console.log("Executing createPatientAction with data:", data);
+          result = await executeAIAction(actionName, data);
+          console.log("createPatientAction result:", result);
+          
+          // If it's a patient creation, update the last created patient ID
+          if (result.patientId) {
+            setLastCreatedPatientId(result.patientId);
+            console.log("Updated lastCreatedPatientId from execute action:", result.patientId);
+          }
+        }
+        
         switch (actionName) {
+          case "createPatientAction":
+            // Success message already shown via the execution above
+            if (result && result.message) {
+              toast.success(result.message);
+            }
+            break;
           case "enableOnlineBooking":
             await toggleOnlineBooking(true);
             toast.success("تم تفعيل الحجز الإلكتروني");
@@ -586,8 +642,22 @@ export default function AskTabibiPage() {
         toast.error(error.message || "حصل مشكلة");
       }
     }
-  }, [navigate, queryClient, clinicData, applyColors, applyThemeMode]);
-  
+  }, [navigate, queryClient, clinicData, applyColors, applyThemeMode, lastCreatedPatientId]);
+
+  const handlePatientCreated = (newPatient) => {
+    // Navigate to the newly created patient's profile
+    if (newPatient?.id) {
+      console.log("AI: Navigating to patient with ID:", newPatient.id, "Full patient object:", newPatient);
+      // Update the last created patient ID for template replacement
+      setLastCreatedPatientId(newPatient.id);
+      console.log("Set lastCreatedPatientId to:", newPatient.id);
+      navigate(`/patients/${newPatient.id}`);
+      setShowPatientDialog(false); // Close the dialog after navigation
+    } else {
+      console.error("AI: No patient ID available for navigation", newPatient);
+    }
+  };
+
   return (
     <div className="h-[100dvh] md:h-[calc(100vh-6rem)] flex flex-col -m-6 md:-m-0 overflow-hidden">
       {/* Appointment Create Dialog */}
@@ -601,7 +671,7 @@ export default function AskTabibiPage() {
         open={showPatientDialog}
         onClose={() => setShowPatientDialog(false)}
         clinicId={user?.clinic_id}
-        onPatientCreated={() => setShowPatientDialog(false)}
+        onPatientCreated={handlePatientCreated}
       />
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar - LEFT side first in flex */}
@@ -678,7 +748,7 @@ export default function AskTabibiPage() {
             ) : (
               <div className="max-w-3xl mx-auto">
                 {messages.map((msg) => (
-                  <ChatMessage key={msg.id} message={msg} onAction={handleAction} />
+                  <ChatMessage key={msg.id} message={msg} onAction={handleAction} executeResults={executeResults} />
                 ))}
                 {isStreaming && <TypingIndicator />}
                 <div ref={messagesEndRef} className="h-1" />

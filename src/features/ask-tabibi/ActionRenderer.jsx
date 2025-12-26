@@ -102,7 +102,8 @@ const {
   Flame,
   ThumbsUp,
   ThumbsDown,
-  PartyPopper
+  PartyPopper,
+  Send
 } = LucideIcons;
 
 // ========================
@@ -272,7 +273,8 @@ const IconMap = {
   Flame,
   ThumbsUp,
   ThumbsDown,
-  PartyPopper
+  PartyPopper,
+  Send
 };
 
 // ========================
@@ -343,35 +345,61 @@ function ActionLink({ action }) {
 }
 
 // ========================
-// Action Input Component
+// Action Input Component - Enhanced for missing data collection
 // ========================
 function ActionInput({ action, onAction }) {
   const [value, setValue] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isSubmitted, setIsSubmitted] = useState(false);
   
   const handleSubmit = async () => {
     if (!value.trim()) return;
     setIsLoading(true);
     await onAction?.("input", { id: action.id, value });
+    setIsSubmitted(true);
     setIsLoading(false);
   };
+  
+  if (isSubmitted) {
+    return (
+      <div className="flex items-center gap-2 py-2 px-3 rounded-lg bg-green-500/10 border border-green-500/20">
+        <CheckCircle className="w-4 h-4 text-green-500" />
+        <span className="text-sm text-green-600 dark:text-green-400">
+          تم إرسال: {value}
+        </span>
+      </div>
+    );
+  }
   
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      className="flex gap-2 items-center"
+      className="space-y-2"
     >
-      <Input
-        placeholder={action.placeholder || "اكتب هنا..."}
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
-        className="flex-1"
-      />
-      <Button onClick={handleSubmit} disabled={isLoading} size="icon">
-        {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-      </Button>
+      {action.label && (
+        <label className="text-sm font-medium text-muted-foreground">
+          {action.label}
+        </label>
+      )}
+      <div className="flex gap-2 items-center">
+        <Input
+          placeholder={action.placeholder || "اكتب هنا..."}
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
+          className="flex-1"
+          type={action.inputType || "text"}
+        />
+        <Button 
+          onClick={handleSubmit} 
+          disabled={isLoading || !value.trim()} 
+          size="icon"
+          className="bg-primary hover:bg-primary/90"
+        >
+          {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+        </Button>
+      </div>
     </motion.div>
   );
 }
@@ -897,15 +925,18 @@ export function ActionRenderer({ actions, onAction }) {
 // Parse AI Response for Actions and Formatting - INLINE SUPPORT
 // ========================
 export function parseAIResponse(content) {
-  // Split content into segments: text and actions
+  // Split content into segments: text, actions, and execute commands
   const segments = [];
-  const actionRegex = /```action\n([\s\S]*?)\n```/g;
+  const executeCommands = []; // Commands to execute automatically
+  
+  // Combined regex for both action and execute blocks
+  const blockRegex = /```(action|execute)\n([\s\S]*?)\n```/g;
   
   let lastIndex = 0;
   let match;
   
-  while ((match = actionRegex.exec(content)) !== null) {
-    // Add text before this action
+  while ((match = blockRegex.exec(content)) !== null) {
+    // Add text before this block
     if (match.index > lastIndex) {
       const textBefore = content.slice(lastIndex, match.index).trim();
       if (textBefore) {
@@ -913,24 +944,43 @@ export function parseAIResponse(content) {
       }
     }
     
-    // Parse and add the action
+    const blockType = match[1]; // 'action' or 'execute'
+    const blockContent = match[2];
+    
     try {
-      const actionData = JSON.parse(match[1]);
-      if (Array.isArray(actionData)) {
-        actionData.forEach(action => {
-          segments.push({ type: 'action', content: action });
+      const parsedData = JSON.parse(blockContent);
+      
+      if (blockType === 'execute') {
+        // This is an execute command - collect for automatic execution
+        if (Array.isArray(parsedData)) {
+          executeCommands.push(...parsedData);
+        } else {
+          executeCommands.push(parsedData);
+        }
+        // Also add a visual indicator that action was executed
+        segments.push({ 
+          type: 'execute', 
+          content: parsedData,
+          status: 'pending' // Will be updated after execution
         });
       } else {
-        segments.push({ type: 'action', content: actionData });
+        // Regular action (button, chart, etc.)
+        if (Array.isArray(parsedData)) {
+          parsedData.forEach(action => {
+            segments.push({ type: 'action', content: action });
+          });
+        } else {
+          segments.push({ type: 'action', content: parsedData });
+        }
       }
     } catch (e) {
-      console.error("Failed to parse action:", e);
+      console.error("Failed to parse block:", e, blockContent);
     }
     
     lastIndex = match.index + match[0].length;
   }
   
-  // Add remaining text after last action
+  // Add remaining text after last block
   if (lastIndex < content.length) {
     const remainingText = content.slice(lastIndex).trim();
     if (remainingText) {
@@ -950,7 +1000,8 @@ export function parseAIResponse(content) {
   return {
     text: textContent,
     actions,
-    segments // New: ordered segments for inline rendering
+    segments, // Ordered segments for inline rendering
+    executeCommands // Commands to execute automatically
   };
 }
 
@@ -1085,9 +1136,64 @@ function formatInlineContent(text) {
 }
 
 // ========================
+// Execute Indicator - Shows execution status
+// ========================
+function ExecuteIndicator({ execute, status = 'pending', result }) {
+  const actionName = execute?.action || 'unknown';
+  
+  // Map action names to friendly labels
+  const actionLabels = {
+    createPatientAction: 'إضافة مريض',
+    updatePatientAction: 'تعديل مريض',
+    createAppointmentAction: 'إضافة موعد',
+    cancelAppointmentAction: 'إلغاء موعد',
+    createVisitAction: 'إضافة كشف',
+    addStaffAction: 'إضافة موظف',
+    setClinicDayOffAction: 'تعديل إجازة',
+    updateClinicHoursAction: 'تعديل مواعيد',
+    updateBookingPriceAction: 'تعديل سعر الكشف'
+  };
+  
+  const label = actionLabels[actionName] || actionName;
+  
+  if (status === 'pending') {
+    return (
+      <div className="flex items-center gap-2 py-2 px-3 rounded-lg bg-primary/10 border border-primary/20">
+        <Loader2 className="w-4 h-4 animate-spin text-primary" />
+        <span className="text-sm text-primary">جاري تنفيذ: {label}...</span>
+      </div>
+    );
+  }
+  
+  if (status === 'success') {
+    return (
+      <div className="flex items-center gap-2 py-2 px-3 rounded-lg bg-green-500/10 border border-green-500/20">
+        <CheckCircle className="w-4 h-4 text-green-500" />
+        <span className="text-sm text-green-600 dark:text-green-400">
+          {result?.message || `تم ${label} بنجاح!`}
+        </span>
+      </div>
+    );
+  }
+  
+  if (status === 'error') {
+    return (
+      <div className="flex items-center gap-2 py-2 px-3 rounded-lg bg-red-500/10 border border-red-500/20">
+        <AlertCircle className="w-4 h-4 text-red-500" />
+        <span className="text-sm text-red-600 dark:text-red-400">
+          {result?.message || 'حصل مشكلة'}
+        </span>
+      </div>
+    );
+  }
+  
+  return null;
+}
+
+// ========================
 // Inline Message Renderer - Renders text and actions in order
 // ========================
-export function InlineMessageRenderer({ segments, onAction }) {
+export function InlineMessageRenderer({ segments, onAction, executeResults = {} }) {
   if (!segments || segments.length === 0) return null;
   
   return (
@@ -1103,6 +1209,30 @@ export function InlineMessageRenderer({ segments, onAction }) {
                 transition={{ delay: index * 0.05 }}
               >
                 <FormattedText text={segment.content} />
+              </motion.div>
+            );
+          }
+          
+          if (segment.type === 'execute') {
+            const execKey = JSON.stringify(segment.content);
+            const execResult = executeResults[execKey];
+            return (
+              <motion.div
+                key={`execute-${index}`}
+                initial={{ opacity: 0, y: 8, scale: 0.98 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                transition={{ 
+                  delay: index * 0.05,
+                  type: "spring",
+                  stiffness: 400,
+                  damping: 25
+                }}
+              >
+                <ExecuteIndicator 
+                  execute={segment.content} 
+                  status={execResult?.status || 'pending'}
+                  result={execResult?.result}
+                />
               </motion.div>
             );
           }

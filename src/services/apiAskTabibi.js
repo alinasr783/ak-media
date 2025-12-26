@@ -1,10 +1,314 @@
 import supabase from "./supabase";
 import { getDashboardStats } from "./apiDashboard";
 import { updateUserPreferences, getUserPreferences } from "./apiUserPreferences";
+import { createPatient, updatePatient } from "./apiPatients";
+import { createAppointment, updateAppointment, deleteAppointment } from "./apiAppointments";
+import { createVisit, updateVisit, deleteVisit } from "./apiVisits";
+import { addSecretary } from "./apiAuth";
+import { updateClinic } from "./apiClinic";
+import { 
+  sendMessageToAI as originalSendMessageToAI,
+  sendMessageToAIStream as originalSendMessageToAIStream,
+  ai,
+  getCurrentDateTime,
+  isComplexQuery
+} from "./ai/aiService";
 
-const OPENROUTER_API_KEY = "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";
-const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
-const AI_MODEL = "deepseek/deepseek-v3.2";
+// ========================
+// Tabibi Actions - CRUD Operations for AI
+// ========================
+
+// Helper to get clinic data
+async function getClinicContext() {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) throw new Error("مش مسجل دخول");
+  
+  const { data: userData } = await supabase
+    .from('users')
+    .select('clinic_id, role')
+    .eq('user_id', session.user.id)
+    .single();
+  
+  if (!userData?.clinic_id) throw new Error("مفيش عيادة");
+  
+  return { userId: session.user.id, clinicId: userData.clinic_id, role: userData.role };
+}
+
+// Guess gender from Arabic name
+function guessGenderFromName(name) {
+  if (!name) return 'male';
+  const femaleEndings = ['ة', 'اء', 'ى'];
+  const femaleNames = ['فاطمة', 'مريم', 'نورا', 'سارة', 'ريم', 'هند', 'منى', 'دعاء', 'آية', 'نور', 'سلمى', 'رنا', 'دينا', 'مها', 'هبة', 'نهى', 'ولاء', 'إيمان', 'أماني'];
+  const firstName = name.split(' ')[0];
+  
+  if (femaleNames.some(fn => firstName.includes(fn))) return 'female';
+  if (femaleEndings.some(ending => firstName.endsWith(ending))) return 'female';
+  return 'male';
+}
+
+// ========================
+// AI Executable Actions
+// ========================
+export const AI_ACTIONS = {
+  // Patient Actions
+  async createPatientAction(data) {
+    const { name, phone, gender, age, address, blood_type, date_of_birth } = data;
+    
+    if (!name) throw new Error("لازم تديني اسم المريض");
+    if (!phone) throw new Error("لازم تديني رقم موبايل المريض");
+    
+    const patientData = {
+      name,
+      phone,
+      gender: gender || guessGenderFromName(name),
+      age: age || null,
+      address: address || null,
+      blood_type: blood_type || null,
+      date_of_birth: date_of_birth || null
+    };
+    
+    const result = await createPatient(patientData);
+    return { 
+      success: true, 
+      message: `تم إضافة المريض "${name}" بنجاح`,
+      data: result,
+      patientId: result.id
+    };
+  },
+  
+  async updatePatientAction(data) {
+    const { patientId, ...updateData } = data;
+    if (!patientId) throw new Error("لازم تديني ID المريض");
+    
+    const result = await updatePatient(patientId, updateData);
+    return { success: true, message: "تم تعديل بيانات المريض بنجاح", data: result };
+  },
+  
+  async searchPatientAction(data) {
+    const { query } = data;
+    const { clinicId } = await getClinicContext();
+    
+    const { data: patients } = await supabase
+      .from('patients')
+      .select('id, name, phone, gender, age')
+      .eq('clinic_id', clinicId)
+      .or(`name.ilike.%${query}%,phone.ilike.%${query}%`)
+      .limit(10);
+    
+    return { success: true, patients: patients || [] };
+  },
+  
+  // Appointment Actions
+  async createAppointmentAction(data) {
+    const { patientId, patientName, patientPhone, date, time, notes, price } = data;
+    
+    let finalPatientId = patientId;
+    
+    // If no patient ID but have name/phone, create or find patient
+    if (!finalPatientId && patientName) {
+      if (!patientPhone) throw new Error("لازم تديني رقم موبايل المريض عشان أقدر أضيفه");
+      
+      // Try to find existing patient
+      const { clinicId } = await getClinicContext();
+      const { data: existingPatient } = await supabase
+        .from('patients')
+        .select('id')
+        .eq('clinic_id', clinicId)
+        .eq('phone', patientPhone)
+        .single();
+      
+      if (existingPatient) {
+        finalPatientId = existingPatient.id;
+      } else {
+        // Create new patient
+        const newPatient = await createPatient({
+          name: patientName,
+          phone: patientPhone,
+          gender: guessGenderFromName(patientName)
+        });
+        finalPatientId = newPatient.id;
+      }
+    }
+    
+    if (!finalPatientId) throw new Error("لازم تديني بيانات المريض (اسمه ورقم موبايله)");
+    if (!date) throw new Error("لازم تديني تاريخ الموعد");
+    
+    // Combine date and time
+    let appointmentDate = date;
+    if (time) {
+      appointmentDate = `${date}T${time}:00`;
+    }
+    
+    const appointmentData = {
+      patient_id: finalPatientId,
+      date: appointmentDate,
+      notes: notes || null,
+      price: price || null,
+      status: 'confirmed'
+    };
+    
+    const result = await createAppointment(appointmentData);
+    return { 
+      success: true, 
+      message: `تم إضافة الموعد بنجاح`,
+      data: result,
+      appointmentId: result.id
+    };
+  },
+  
+  async updateAppointmentAction(data) {
+    const { appointmentId, ...updateData } = data;
+    if (!appointmentId) throw new Error("لازم تديني ID الموعد");
+    
+    const result = await updateAppointment(appointmentId, updateData);
+    return { success: true, message: "تم تعديل الموعد بنجاح", data: result };
+  },
+  
+  async cancelAppointmentAction(data) {
+    const { appointmentId } = data;
+    if (!appointmentId) throw new Error("لازم تديني ID الموعد");
+    
+    const result = await updateAppointment(appointmentId, { status: 'cancelled' });
+    return { success: true, message: "تم إلغاء الموعد بنجاح", data: result };
+  },
+  
+  // Visit/Examination Actions
+  async createVisitAction(data) {
+    const { patientId, diagnosis, notes, medications } = data;
+    
+    if (!patientId) throw new Error("لازم تديني ID المريض");
+    
+    const visitData = {
+      patient_id: patientId,
+      diagnosis: diagnosis || null,
+      notes: notes || null,
+      medications: medications || null
+    };
+    
+    const result = await createVisit(visitData);
+    return { success: true, message: "تم إضافة الكشف بنجاح", data: result };
+  },
+  
+  // Staff Actions
+  async addStaffAction(data) {
+    const { name, email, password, phone, permissions } = data;
+    const { clinicId } = await getClinicContext();
+    
+    if (!name) throw new Error("لازم تديني اسم الموظف");
+    if (!email) throw new Error("لازم تديني إيميل الموظف");
+    if (!password) throw new Error("لازم تديني باسورد للموظف");
+    
+    const result = await addSecretary({
+      name,
+      email,
+      password,
+      phone: phone || '',
+      clinicId,
+      permissions: permissions || ['dashboard', 'calendar', 'patients']
+    });
+    
+    return { success: true, message: `تم إضافة الموظف "${name}" بنجاح`, data: result };
+  },
+  
+  // Clinic Settings Actions
+  async setClinicDayOffAction(data) {
+    const { day, off } = data;
+    const { clinicId } = await getClinicContext();
+    
+    // Get current clinic settings
+    const { data: clinic } = await supabase
+      .from('clinics')
+      .select('available_time')
+      .eq('clinic_uuid', clinicId)
+      .single();
+    
+    let availableTime = clinic?.available_time || {};
+    if (typeof availableTime === 'string') {
+      availableTime = JSON.parse(availableTime);
+    }
+    
+    // Map day names
+    const dayMap = {
+      'السبت': 'saturday', 'saturday': 'saturday',
+      'الأحد': 'sunday', 'sunday': 'sunday',
+      'الاثنين': 'monday', 'monday': 'monday',
+      'الثلاثاء': 'tuesday', 'tuesday': 'tuesday',
+      'الأربعاء': 'wednesday', 'wednesday': 'wednesday',
+      'الخميس': 'thursday', 'thursday': 'thursday',
+      'الجمعة': 'friday', 'friday': 'friday'
+    };
+    
+    const dayKey = dayMap[day.toLowerCase()] || day.toLowerCase();
+    
+    if (!availableTime[dayKey]) {
+      availableTime[dayKey] = { start: '09:00', end: '17:00', off: false };
+    }
+    availableTime[dayKey].off = off !== false;
+    
+    await supabase
+      .from('clinics')
+      .update({ available_time: availableTime })
+      .eq('clinic_uuid', clinicId);
+    
+    return { 
+      success: true, 
+      message: off !== false ? `تم إقفال الحجز يوم ${day}` : `تم فتح الحجز يوم ${day}` 
+    };
+  },
+  
+  async updateClinicHoursAction(data) {
+    const { day, start, end } = data;
+    const { clinicId } = await getClinicContext();
+    
+    const { data: clinic } = await supabase
+      .from('clinics')
+      .select('available_time')
+      .eq('clinic_uuid', clinicId)
+      .single();
+    
+    let availableTime = clinic?.available_time || {};
+    if (typeof availableTime === 'string') {
+      availableTime = JSON.parse(availableTime);
+    }
+    
+    const dayMap = {
+      'السبت': 'saturday', 'الأحد': 'sunday', 'الاثنين': 'monday',
+      'الثلاثاء': 'tuesday', 'الأربعاء': 'wednesday',
+      'الخميس': 'thursday', 'الجمعة': 'friday'
+    };
+    
+    const dayKey = dayMap[day] || day.toLowerCase();
+    availableTime[dayKey] = { start, end, off: false };
+    
+    await supabase
+      .from('clinics')
+      .update({ available_time: availableTime })
+      .eq('clinic_uuid', clinicId);
+    
+    return { success: true, message: `تم تعديل مواعيد يوم ${day} من ${start} إلى ${end}` };
+  },
+  
+  async updateBookingPriceAction(data) {
+    const { price } = data;
+    const { clinicId } = await getClinicContext();
+    
+    await supabase
+      .from('clinics')
+      .update({ booking_price: price })
+      .eq('clinic_uuid', clinicId);
+    
+    return { success: true, message: `تم تعديل سعر الكشف إلى ${price} جنيه` };
+  }
+};
+
+// Execute an action by name
+export async function executeAIAction(actionName, data) {
+  const actionFn = AI_ACTIONS[actionName];
+  if (!actionFn) {
+    throw new Error(`الأمر ده مش موجود: ${actionName}`);
+  }
+  return await actionFn(data);
+}
 
 // ========================
 // جلب بيانات المرضى (شاملة)
@@ -187,6 +491,17 @@ async function getAppointmentsData() {
       .gte('date', startOfMonth.toISOString())
       .lte('date', endOfMonth.toISOString());
 
+    // Get previous month's appointments for comparison
+    const prevMonthStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+    const prevMonthEnd = new Date(today.getFullYear(), today.getMonth(), 0);
+    
+    const { count: prevMonthCount } = await supabase
+      .from('appointments')
+      .select('*', { count: 'exact', head: true })
+      .eq('clinic_id', clinicId)
+      .gte('date', prevMonthStart.toISOString())
+      .lte('date', prevMonthEnd.toISOString());
+
     // Get past appointments (last 30 days)
     const thirtyDaysAgo = new Date(today);
     thirtyDaysAgo.setDate(today.getDate() - 30);
@@ -236,6 +551,8 @@ async function getAppointmentsData() {
       },
       thisWeek: weekCount || 0,
       thisMonth: monthCount || 0,
+      previousMonth: prevMonthCount || 0,
+      monthOverMonthChange: prevMonthCount > 0 ? Math.round(((monthCount - prevMonthCount) / prevMonthCount) * 100) : 0,
       past: {
         total: pastCount || 0,
         appointments: (pastAppts || []).map(a => ({
@@ -333,12 +650,42 @@ async function getFinanceData() {
         type: r.type,
         description: r.description?.substring(0, 50) || '',
         date: r.created_at
-      }))
+      })),
+      // Monthly breakdown for charts
+      monthlyBreakdown: getMonthlyBreakdownFromRecords(yearRecords || [])
     };
   } catch (error) {
     console.error('Error fetching finance data:', error);
     return null;
   }
+}
+
+// Helper function to get monthly breakdown for charts
+function getMonthlyBreakdownFromRecords(records) {
+  const months = {};
+  const arabicMonths = [
+    'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو',
+    'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'
+  ];
+  
+  records.forEach(r => {
+    const date = new Date(r.created_at);
+    const monthKey = `${date.getFullYear()}-${date.getMonth()}`;
+    const monthName = arabicMonths[date.getMonth()];
+    
+    if (!months[monthKey]) {
+      months[monthKey] = { name: monthName, income: 0, expenses: 0 };
+    }
+    
+    if (r.type === 'income' || r.amount > 0) {
+      months[monthKey].income += Math.abs(r.amount || 0);
+    } else {
+      months[monthKey].expenses += Math.abs(r.amount || 0);
+    }
+  });
+  
+  // Return last 6 months sorted
+  return Object.values(months).slice(-6);
 }
 
 // ========================
@@ -883,6 +1230,9 @@ const getSystemPrompt = (userData, clinicData, subscriptionData, statsData, allD
   const userName = userData?.name || "المستخدم";
   const clinicName = clinicData?.name || "العيادة";
   
+  // Get current date/time
+  const dateTime = getCurrentDateTime();
+  
   // Stats data
   const totalPatients = statsData?.totalPatients || 0;
   const todayAppointments = statsData?.todayAppointments || 0;
@@ -950,6 +1300,8 @@ const getSystemPrompt = (userData, clinicData, subscriptionData, statsData, allD
   const appointmentsToday = appointmentsData?.today || {};
   const appointmentsThisWeek = appointmentsData?.thisWeek || 0;
   const appointmentsThisMonth = appointmentsData?.thisMonth || 0;
+  const appointmentsPreviousMonth = appointmentsData?.previousMonth || 0;
+  const appointmentsMonthChange = appointmentsData?.monthOverMonthChange || 0;
   const appointmentsPast = appointmentsData?.past || {};
   const appointmentsFuture = appointmentsData?.future || {};
   const todayAppointmentsList = appointmentsData?.todayAppointments || [];
@@ -958,6 +1310,7 @@ const getSystemPrompt = (userData, clinicData, subscriptionData, statsData, allD
   const financeThisMonth = financeData?.thisMonth || {};
   const financeThisYear = financeData?.thisYear || {};
   const recentTransactions = financeData?.recentTransactions || [];
+  const financeMonthlyBreakdown = financeData?.monthlyBreakdown || [];
   
   // Clinic settings data
   const clinicAddress = clinicSettingsData?.address || 'غير محدد';
@@ -971,6 +1324,11 @@ const getSystemPrompt = (userData, clinicData, subscriptionData, statsData, allD
   const patientPlansList = patientPlansData?.plans || [];
   
   return `انت اسمك "طبيبي" (Tabibi) - مساعد ذكي متقدم لمنصة إدارة العيادات. بترد باللهجة المصرية بطريقة ودودة ومختصرة.
+
+## معلومات الوقت:
+- اليوم: ${dateTime.full}
+- الوقت: ${dateTime.time}
+- التاريخ: ${dateTime.date}
 
 ## معلومات المستخدم:
 - الاسم: ${userName}
@@ -1001,6 +1359,8 @@ const getSystemPrompt = (userData, clinicData, subscriptionData, statsData, allD
   - من الموقع: ${appointmentsToday.fromOnline || 0} | من العيادة: ${appointmentsToday.fromClinic || 0}
 - مواعيد الأسبوع: **${appointmentsThisWeek}**
 - مواعيد الشهر: **${appointmentsThisMonth}**
+- مواعيد الشهر اللي فات: **${appointmentsPreviousMonth}**
+- التغيير شهر بشهر: **${appointmentsMonthChange > 0 ? '+' : ''}${appointmentsMonthChange}%** ${appointmentsMonthChange > 0 ? '[ارتفاع]' : appointmentsMonthChange < 0 ? '[انخفاض]' : '[ثابت]'}
 - مواعيد الماضي (آخر 30 يوم): **${appointmentsPast.total || 0}**
 - مواعيد المستقبل (الـ 30 يوم الجاية): **${appointmentsFuture.total || 0}**
 
@@ -1123,6 +1483,11 @@ const getSystemPrompt = (userData, clinicData, subscriptionData, statsData, allD
 - changeColors: تغيير الألوان (data: {primary: "#hex", secondary: "#hex", accent: "#hex"})
 - reorderMenu: تغيير ترتيب المنيو (data: {itemId: "id", position: number})
 - resetSettings: إعادة كل الإعدادات للوضع الافتراضي
+
+## مهم جدا:
+- **ممنوع استخدام placeholder مثلا {{patientId}} أو {{appointmentId}}** - استخدم الأرقام الحقيقية من البيانات
+- **ممنوع إنشاء روابط باستخدام placeholder** - استخدم الأرقام الحقيقية
+- **لو حصلت نتيجة تنفيذ، استخدم الـ ID الحقيقي من النتيجة**
 
 ## أمثلة:
 
@@ -1304,6 +1669,132 @@ ${onlineBookingEnabled ? '[icon:CheckCircle] الحجز الإلكتروني **�
 10. اختر نوع الرسم البياني المناسب للبيانات (pie للنسب، bar للمقارنات، line للاتجاهات)
 11. عندك بيانات كل المواعيد (الماضي والحالي والمستقبل) - متقولش إنك معندكش بيانات
 12. عندك بيانات كل الماليات (إيرادات ومصروفات) - قدر توصلها
+
+## 🚀 Tabibi Actions - التنفيذ المباشر (مهم جدا!):
+
+**انت تقدر تنفذ أوامر مباشرة بدون أزرار!** لما حد يطلب حاجة، نفذها فوريًا.
+
+### صيغة التنفيذ المباشر:
+\`\`\`execute
+{"action": "actionName", "data": {...}}
+\`\`\`
+
+### الأوامر المتاحة للتنفيذ المباشر:
+
+**1. إضافة مريض جديد (createPatientAction):**
+لما حد يقول: "أضف مريض اسمه علي نصر رقمه 01098764899"
+\`\`\`execute
+{"action": "createPatientAction", "data": {"name": "علي نصر", "phone": "01098764899"}}
+\`\`\`
+بعد التنفيذ: "تم إضافة المريض بنجاح!" + زر للروح للملف
+
+**معطيات createPatientAction:**
+- name: اسم المريض (مطلوب)
+- phone: رقم الموبايل (مطلوب)
+- gender: الجنس (male/female) - اختياري، هيتخمن من الاسم
+- age: العمر - اختياري
+- address: العنوان - اختياري
+
+**2. إضافة موعد جديد (createAppointmentAction):**
+لما حد يقول: "اعمل موعد لأحمد محمد 01011111111 بكرة الساعة 3"
+\`\`\`execute
+{"action": "createAppointmentAction", "data": {"patientName": "أحمد محمد", "patientPhone": "01011111111", "date": "2024-01-15", "time": "15:00"}}
+\`\`\`
+
+**معطيات createAppointmentAction:**
+- patientId: ID المريض (لو معروف)
+- patientName: اسم المريض (لو مفيش ID)
+- patientPhone: رقم الموبايل (مطلوب لو مفيش ID)
+- date: التاريخ بصيغة YYYY-MM-DD (مطلوب)
+- time: الوقت بصيغة HH:MM - اختياري
+- notes: ملاحظات - اختياري
+- price: السعر - اختياري
+
+**3. إلغاء موعد (cancelAppointmentAction):**
+\`\`\`execute
+{"action": "cancelAppointmentAction", "data": {"appointmentId": "uuid"}}
+\`\`\`
+
+**4. إضافة كشف (createVisitAction):**
+\`\`\`execute
+{"action": "createVisitAction", "data": {"patientId": "uuid", "diagnosis": "التشخيص", "medications": "الأدوية"}}
+\`\`\`
+
+**5. إضافة موظف (addStaffAction):**
+\`\`\`execute
+{"action": "addStaffAction", "data": {"name": "الاسم", "email": "email@example.com", "password": "123456", "phone": "01011111111"}}
+\`\`\`
+
+**6. إقفال/فتح الحجز يوم معين (setClinicDayOffAction):**
+لما حد يقول: "اقفل الحجز يوم الجمعة"
+\`\`\`execute
+{"action": "setClinicDayOffAction", "data": {"day": "الجمعة", "off": true}}
+\`\`\`
+لما حد يقول: "افتح الحجز يوم الجمعة"
+\`\`\`execute
+{"action": "setClinicDayOffAction", "data": {"day": "الجمعة", "off": false}}
+\`\`\`
+
+**7. تعديل مواعيد العمل (updateClinicHoursAction):**
+\`\`\`execute
+{"action": "updateClinicHoursAction", "data": {"day": "السبت", "start": "10:00", "end": "18:00"}}
+\`\`\`
+
+**8. تعديل سعر الكشف (updateBookingPriceAction):**
+\`\`\`execute
+{"action": "updateBookingPriceAction", "data": {"price": 200}}
+\`\`\`
+
+### قواعد التنفيذ المباشر:
+1. **لو البيانات كاملة** → نفذ فوراً بدون سؤال
+2. **لو البيانات ناقصة** → اسأل عن البيانات المطلوبة فقط + اعرض input للإدخال
+3. **بعد التنفيذ** → أكد النجاح + اعرض زر للإجراء التالي
+
+### مثال كامل - إضافة مريض:
+
+**المستخدم:** "أضف مريض اسمه علي نصر رقمه 01098764899"
+**الرد:**
+\`\`\`execute
+{"action": "createPatientAction", "data": {"name": "علي نصر", "phone": "01098764899"}}
+\`\`\`
+[icon:CheckCircle] تم إضافة المريض "علي نصر" بنجاح!
+\`\`\`action
+{"type": "button", "label": "فتح ملف المريض", "navigate": "/patients/{{patientId}}", "icon": "User"}
+\`\`\`
+
+### مثال - بيانات ناقصة:
+
+**المستخدم:** "أضف مريض اسمه سارة"
+**الرد:**
+[icon:AlertCircle] عشان أضيف المريضة سارة، محتاج رقم الموبايل:
+\`\`\`action
+{"type": "input", "id": "patientPhone", "placeholder": "رقم الموبايل"}
+\`\`\`
+
+### مثال - إقفال يوم:
+
+**المستخدم:** "اقفل الحجز يوم الجمعة"
+**الرد:**
+\`\`\`execute
+{"action": "setClinicDayOffAction", "data": {"day": "الجمعة", "off": true}}
+\`\`\`
+[icon:CheckCircle] تم! يوم الجمعة بقى إجازة والحجز مقفول فيه.
+
+## 📊 Tabibi Charts - الرسومات البيانية المتقدمة:
+
+### قواعد الرسومات:
+1. **للنسب والتوزيعات** → استخدم pie/donut
+2. **للمقارنات** → استخدم bar (vertical/horizontal)
+3. **للاتجاهات عبر الزمن** → استخدم line
+
+### مقارنة فترات:
+لما حد يطلب مقارنة شهر بشهر، استخدم البيانات المتاحة واعرضها في رسم بياني مناسب.
+
+### تحليل الرسومات:
+لما تعرض رسم بياني، اشرح النتائج:
+- "الحجوزات من الموقع أكثر بنسبة X%"
+- "فيه زيادة في المرضى الذكور"
+- "الإيرادات ارتفعت هذا الشهر"
 
 ## تحذير أمني مهم جدا:
 - **ممنوع منعا باتا** الوصول لأكواد الخصم أو ذكرها نهائيا
@@ -1512,172 +2003,10 @@ export async function resetToDefaultSettings() {
 
 // إرسال رسالة للـ AI
 export async function sendMessageToAI(messages, userData, clinicData, subscriptionData, deepReasoning = false) {
-  // Fetch all context data in parallel
-  let statsData = null;
-  let allData = null;
-  
-  try {
-    const [stats, contextData] = await Promise.all([
-      getDashboardStats().catch(err => {
-        console.error("Failed to fetch stats:", err);
-        return { totalPatients: 0, todayAppointments: 0, pendingAppointments: 0, totalIncome: 0 };
-      }),
-      getAllAIContextData().catch(err => {
-        console.error("Failed to fetch context data:", err);
-        return {};
-      })
-    ]);
-    statsData = stats;
-    allData = contextData;
-  } catch (error) {
-    console.error("Failed to fetch AI context:", error);
-    statsData = { totalPatients: 0, todayAppointments: 0, pendingAppointments: 0, totalIncome: 0 };
-    allData = {};
-  }
-  
-  const systemPrompt = getSystemPrompt(userData, clinicData, subscriptionData, statsData, allData);
-  
-  const formattedMessages = [
-    { role: "system", content: systemPrompt },
-    ...messages.map(msg => ({
-      role: msg.role,
-      content: msg.content
-    }))
-  ];
-
-  try {
-    const requestBody = {
-      model: AI_MODEL,
-      messages: formattedMessages,
-      temperature: 0.7,
-      max_tokens: 2000
-    };
-    
-    // Add reasoning only if enabled
-    if (deepReasoning) {
-      requestBody.reasoning = { enabled: true };
-    }
-    
-    const response = await fetch(OPENROUTER_URL, {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
-        "HTTP-Referer": window.location.origin,
-        "X-Title": "Tabibi - Clinic Management System",
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify(requestBody)
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      console.error("AI API Error:", errorData);
-      throw new Error("حصل مشكلة في التواصل مع الـ AI");
-    }
-
-    const data = await response.json();
-    
-    if (data.choices && data.choices[0]?.message?.content) {
-      return data.choices[0].message.content;
-    }
-    
-    throw new Error("الرد من الـ AI مش واضح");
-  } catch (error) {
-    console.error("Error calling AI:", error);
-    throw error;
-  }
+  return await originalSendMessageToAI(messages, userData, clinicData, subscriptionData, deepReasoning);
 }
 
 // Streaming version للرسائل (لو عايز تعرض الرد حرف حرف)
 export async function sendMessageToAIStream(messages, userData, clinicData, subscriptionData, onChunk) {
-  // Fetch all context data in parallel
-  let statsData = null;
-  let allData = null;
-  
-  try {
-    const [stats, contextData] = await Promise.all([
-      getDashboardStats().catch(err => {
-        console.error("Failed to fetch stats:", err);
-        return { totalPatients: 0, todayAppointments: 0, pendingAppointments: 0, totalIncome: 0 };
-      }),
-      getAllAIContextData().catch(err => {
-        console.error("Failed to fetch context data:", err);
-        return {};
-      })
-    ]);
-    statsData = stats;
-    allData = contextData;
-  } catch (error) {
-    console.error("Failed to fetch AI context:", error);
-    statsData = { totalPatients: 0, todayAppointments: 0, pendingAppointments: 0, totalIncome: 0 };
-    allData = {};
-  }
-  
-  const systemPrompt = getSystemPrompt(userData, clinicData, subscriptionData, statsData, allData);
-  
-  const formattedMessages = [
-    { role: "system", content: systemPrompt },
-    ...messages.map(msg => ({
-      role: msg.role,
-      content: msg.content
-    }))
-  ];
-
-  try {
-    const response = await fetch(OPENROUTER_URL, {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
-        "HTTP-Referer": window.location.origin,
-        "X-Title": "Tabibi - Clinic Management System",
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        model: AI_MODEL,
-        messages: formattedMessages,
-        temperature: 0.7,
-        max_tokens: 2000,
-        stream: true
-      })
-    });
-
-    if (!response.ok) {
-      throw new Error("حصل مشكلة في التواصل مع الـ AI");
-    }
-
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let fullContent = "";
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      const chunk = decoder.decode(value);
-      const lines = chunk.split("\n").filter(line => line.trim() !== "");
-
-      for (const line of lines) {
-        if (line.startsWith("data: ")) {
-          const data = line.slice(6);
-          if (data === "[DONE]") continue;
-
-          try {
-            const parsed = JSON.parse(data);
-            const content = parsed.choices?.[0]?.delta?.content || "";
-            if (content) {
-              fullContent += content;
-              onChunk(content, fullContent);
-            }
-          } catch (e) {
-            // Ignore parsing errors for incomplete chunks
-          }
-        }
-      }
-    }
-
-    return fullContent;
-  } catch (error) {
-    console.error("Error streaming AI:", error);
-    throw error;
-  }
+  return await originalSendMessageToAIStream(messages, userData, clinicData, subscriptionData, onChunk);
 }
