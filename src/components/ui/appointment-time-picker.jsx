@@ -230,47 +230,52 @@ export default function AppointmentTimePicker({
   };
 
   return (
-    <div className="rounded-lg border border-border">
-      <div className="flex max-sm:flex-col">
-        <Calendar
-          mode="single"
-          selected={date}
-          onSelect={handleDateSelect}
-          className="p-2 sm:pe-5 bg-background w-full"
-          disabled={[{ before: new Date() }, (date) => !isDateAvailable(date)]}
-        />
-        <div className="relative w-full max-sm:h-auto sm:w-40">
-          <div className="border-border py-4 max-sm:border-t">
-            <ScrollArea className="max-sm:h-auto sm:h-[300px] border-border sm:border-s [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
-              <div className="space-y-3">
-                <div className="flex h-5 shrink-0 items-center px-5">
-                  <p className="text-sm font-medium">
-                    {format(date, "EEEE, d MMMM", { locale: ar })}
-                  </p>
-                </div>
-                {timeSlots.length > 0 ? (
-                  <div className="grid gap-1.5 px-5 max-sm:grid-cols-3 sm:grid-cols-1 pb-4">
-                    {timeSlots.map(({ time: timeSlot, available }) => (
-                      <Button
-                        key={timeSlot}
-                        variant={time === timeSlot ? "default" : "outline"}
-                        size="sm"
-                        className="w-full"
-                        onClick={() => handleTimeSelect(timeSlot)}
-                        disabled={!available}
-                      >
-                        {timeSlot}
-                      </Button>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="px-5 py-3 text-center text-sm text-muted-foreground">
-                    لا توجد أوقات متاحة لهذا اليوم
-                  </div>
-                )}
+    <div className="rounded-lg border border-border bg-background overflow-hidden w-full">
+      {/* Calendar Section */}
+      <div className="p-2 sm:p-3 w-full">
+        <div className="w-full overflow-x-auto">
+          <Calendar
+            mode="single"
+            selected={date}
+            onSelect={handleDateSelect}
+            className="w-full min-w-[280px]"
+            disabled={[{ before: new Date() }, (date) => !isDateAvailable(date)]}
+          />
+        </div>
+      </div>
+      
+      {/* Time Slots Section */}
+      <div className="border-t border-border">
+        <div className="p-3 sm:p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-1 h-4 bg-primary rounded-full flex-shrink-0"></div>
+            <p className="text-sm font-semibold text-foreground truncate">
+              {format(date, "EEEE, d MMMM", { locale: ar })}
+            </p>
+          </div>
+          
+          {timeSlots.length > 0 ? (
+            <ScrollArea className="max-h-[300px] [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+              <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 pb-2">
+                {timeSlots.map(({ time: timeSlot, available }) => (
+                  <Button
+                    key={timeSlot}
+                    variant={time === timeSlot ? "default" : "outline"}
+                    size="sm"
+                    className="w-full h-9 text-xs font-medium transition-all hover:scale-105"
+                    onClick={() => handleTimeSelect(timeSlot)}
+                    disabled={!available}
+                  >
+                    {timeSlot}
+                  </Button>
+                ))}
               </div>
             </ScrollArea>
-          </div>
+          ) : (
+            <div className="py-8 text-center">
+              <p className="text-sm text-muted-foreground">لا توجد أوقات متاحة لهذا اليوم</p>
+            </div>
+          )}
         </div>
       </div>
     </div>

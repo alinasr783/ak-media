@@ -86,7 +86,7 @@ export async function createPatient(payload) {
     console.error("Error creating patient:", error)
     throw error
   }
-  
+
   // Debug: Log the created patient data
   console.log("createPatient returning data:", data);
   return data
@@ -117,7 +117,7 @@ export async function createPatientPublic(payload) {
     console.error("Error creating patient:", error)
     throw error
   }
-  
+
   // Debug: Log the created patient data
   console.log("createPatientPublic returning data:", data);
   return data
@@ -126,7 +126,7 @@ export async function createPatientPublic(payload) {
 export async function getPatientById(id) {
   // Debug: Log the ID being used for fetching
   console.log("getPatientById called with ID:", id);
-  
+
   // Get current user's clinic_id for security
   const { data: { session } } = await supabase.auth.getSession()
   if (!session) throw new Error("Not authenticated")
@@ -151,13 +151,13 @@ export async function getPatientById(id) {
   if (error) {
     console.error("Error fetching patient by ID:", error);
     console.error("Attempted to fetch patient ID:", id, "for clinic:", userData.clinic_id);
-    
+
     // Check if the error is because the patient doesn't exist
     if (error.code === 'PGRST116' && error.details === 'The result contains 0 rows') {
       console.warn(`Patient with ID ${id} not found in clinic ${userData.clinic_id}`);
       return null; // Return null instead of throwing for missing patient
     }
-    
+
     throw error;
   }
   return data
@@ -222,7 +222,7 @@ export async function getPatientFinancialData(patientId) {
 
   if (appointmentsError) {
     console.error("Error fetching patient appointments for financial data:", appointmentsError);
-    
+
     // Check if the error is because there are no appointments for this patient
     if (appointmentsError.code === 'PGRST116' && appointmentsError.details === 'The result contains 0 rows') {
       console.warn(`No appointments found for patient with ID ${patientId} in clinic ${userData.clinic_id}`);
@@ -234,7 +234,7 @@ export async function getPatientFinancialData(patientId) {
         paymentHistory: []
       };
     }
-    
+
     throw appointmentsError;
   }
 

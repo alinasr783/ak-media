@@ -5,26 +5,59 @@ import { Label } from "../../components/ui/label";
 import { Card, CardContent } from "../../components/ui/card";
 import { useAuth } from "../auth/AuthContext";
 import useUpdateProfile from "./useUpdateProfile";
+import useClinic from "../auth/useClinic";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { updateClinic } from "../../services/apiClinic";
+import toast from "react-hot-toast";
 
 export default function PersonalInfoTab() {
   const { user } = useAuth();
-  const { mutate: updateProfile, isPending } = useUpdateProfile();
+  const { mutate: updateProfile, isPending: isProfilePending } = useUpdateProfile();
+  
+  // Clinic data hooks
+  const { data: clinic, isLoading: isClinicLoading } = useClinic();
+  const queryClient = useQueryClient();
+  
+  const { mutate: updateClinicData, isPending: isClinicPending } = useMutation({
+    mutationFn: updateClinic,
+    onSuccess: () => {
+      queryClient.invalidateQueries(["clinic"]);
+      // Only show success toast if we're not also updating profile (to avoid double toasts)
+      // or rely on the profile update toast if both are happening
+    },
+    onError: (error) => {
+      toast.error("حدث خطأ أثناء تحديث بيانات العيادة: " + error.message);
+    }
+  });
   
   const [formData, setFormData] = useState({
     name: "",
     email: "",
-    phone: ""
+    phone: "",
+    clinicName: "",
+    clinicAddress: ""
   });
 
   useEffect(() => {
     if (user) {
-      setFormData({
+      setFormData(prev => ({
+        ...prev,
         name: user.name || "",
         email: user.email || "",
         phone: user.phone || ""
-      });
+      }));
     }
   }, [user]);
+
+  useEffect(() => {
+    if (clinic && user?.role === 'doctor') {
+      setFormData(prev => ({
+        ...prev,
+        clinicName: clinic.name || "",
+        clinicAddress: clinic.address || ""
+      }));
+    }
+  }, [clinic, user]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -36,15 +69,30 @@ export default function PersonalInfoTab() {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    updateProfile(formData);
+    
+    // Update profile
+    updateProfile({
+      name: formData.name,
+      phone: formData.phone
+    });
+    
+    // Update clinic if doctor and fields are changed
+    if (user?.role === 'doctor') {
+      updateClinicData({
+        name: formData.clinicName,
+        address: formData.clinicAddress
+      });
+    }
   };
+
+  const isPending = isProfilePending || isClinicPending;
 
   return (
     <div className="space-y-4">
       <div>
         <h2 className="text-base sm:text-lg font-semibold">البيانات الشخصية</h2>
         <p className="text-xs sm:text-sm text-muted-foreground">
-          قم بتحديث معلومات حسابك الشخصية
+          قم بتحديث معلومات حسابك الشخصية{user?.role === 'doctor' ? ' وبيانات العيادة' : ''}
         </p>
       </div>
 
@@ -92,6 +140,38 @@ export default function PersonalInfoTab() {
                 className="text-sm"
               />
             </div>
+
+            {user?.role === 'doctor' && (
+              <>
+                <div className="border-t pt-4 mt-4">
+                  <h3 className="text-sm font-semibold mb-3">بيانات العيادة</h3>
+                </div>
+                
+                <div className="space-y-1.5">
+                  <Label htmlFor="clinicName" className="text-sm">اسم العيادة</Label>
+                  <Input
+                    id="clinicName"
+                    name="clinicName"
+                    value={formData.clinicName}
+                    onChange={handleChange}
+                    placeholder="أدخل اسم العيادة"
+                    className="text-sm"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="clinicAddress" className="text-sm">عنوان العيادة</Label>
+                  <Input
+                    id="clinicAddress"
+                    name="clinicAddress"
+                    value={formData.clinicAddress}
+                    onChange={handleChange}
+                    placeholder="أدخل عنوان العيادة"
+                    className="text-sm"
+                  />
+                </div>
+              </>
+            )}
 
             <div className="pt-2 sm:pt-4">
               <Button type="submit" disabled={isPending} className="w-full sm:w-auto">

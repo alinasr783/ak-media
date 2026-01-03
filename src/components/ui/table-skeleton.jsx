@@ -44,7 +44,7 @@ export default function TableSkeleton() {
               <div className="h-9 bg-gray-200 rounded w-24"></div>
             </div>
           </div>
-        </div>
+        </div> 
       </CardContent>
     </Card>
   );

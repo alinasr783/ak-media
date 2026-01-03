@@ -1,5 +1,5 @@
 import { CalendarPlus, Search, Clock, CalendarDays, Filter, RefreshCw, Plus, Users, Calendar, CheckCircle, X, AlertCircle } from "lucide-react"
-import { useEffect, useState } from "react"
+import { useEffect, useState, useMemo } from "react"
 import { Button } from "../../components/ui/button"
 import { Card, CardContent } from "../../components/ui/card"
 import { Input } from "../../components/ui/input"
@@ -55,9 +55,28 @@ export default function CalendarPage() {
     setActiveTab("all")
   }
   
+  // Auto-switch to "all" tab when searching
+  useEffect(() => {
+    if (query) {
+      setActiveTab("all")
+    }
+  }, [query])
+
+  // Fetch today's appointments specifically for stats
+  const todayFilter = useMemo(() => {
+    // Get local date string in YYYY-MM-DD format
+    const localDate = new Date().toLocaleDateString('en-CA')
+    return { date: localDate }
+  }, [])
+
+  const { 
+    data: todayStatsData,
+    refetch: refetchTodayStats 
+  } = useAppointments("", 1, 2000, todayFilter)
+
   const handleRefresh = async () => {
     setIsRefreshing(true)
-    await Promise.all([refetchUpcoming(), refetchAll()])
+    await Promise.all([refetchUpcoming(), refetchAll(), refetchTodayStats()])
     setTimeout(() => setIsRefreshing(false), 500)
   }
 
@@ -66,18 +85,26 @@ export default function CalendarPage() {
     const interval = setInterval(() => {
       refetchUpcoming()
       refetchAll()
+      refetchTodayStats()
     }, 10 * 60 * 1000)
     return () => clearInterval(interval)
-  }, [refetchUpcoming, refetchAll])
+  }, [refetchUpcoming, refetchAll, refetchTodayStats])
 
   // Stats calculations
-  const today = new Date().toISOString().split('T')[0]
-  const todayAppointments = upcomingData?.items?.filter(a => a.date === today) || []
-  const completedToday = todayAppointments.filter(a => a.status === 'completed').length
-  const pendingToday = todayAppointments.filter(a => a.status === 'pending' || a.status === 'confirmed').length
+  const todayAppointments = todayStatsData?.items || []
+  
+  const completedToday = todayAppointments.filter(a => {
+    const status = a.status?.toLowerCase()?.trim();
+    return ['completed', 'done', 'finish', 'finished'].includes(status);
+  }).length
+
+  const pendingToday = todayAppointments.filter(a => {
+    const status = a.status?.toLowerCase()?.trim();
+    return ['pending', 'confirmed'].includes(status);
+  }).length
   
   const stats = {
-    today: todayAppointments.length,
+    today: todayStatsData?.total || 0,
     completedToday,
     pendingToday,
     upcoming: upcomingData?.total || 0,
@@ -186,7 +213,7 @@ export default function CalendarPage() {
             <Button
               variant="outline"
               onClick={() => navigate("/work-mode")}
-              className="h-10 md:h-11 text-sm md:text-base"
+              className="h-10 md:h-11 text-sm md:text-base flex-1"
             >
               <Calendar className="w-3.5 h-3.5 md:w-4 md:h-4 ml-1 md:ml-2" />
               <span className="hidden sm:inline">وضع العمل</span>
@@ -196,7 +223,7 @@ export default function CalendarPage() {
             <Button
               variant="outline"
               onClick={() => setShowFilters(!showFilters)}
-              className="h-10 md:h-11 text-sm md:text-base"
+              className="h-10 md:h-11 text-sm md:text-base flex-1"
             >
               <Filter className="w-3.5 h-3.5 md:w-4 md:h-4 ml-1 md:ml-2" />
               <span className="hidden sm:inline">{showFilters ? 'إخفاء' : 'فلاتر'}</span>
@@ -206,7 +233,7 @@ export default function CalendarPage() {
             <Button
               variant="outline"
               onClick={handleRefresh}
-              className="h-10 md:h-11"
+              className="h-10 md:h-11 col-span-2 md:w-auto"
             >
               <RefreshCw className={`w-3.5 h-3.5 md:w-4 md:h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
             </Button>
@@ -240,54 +267,50 @@ export default function CalendarPage() {
           </div>
         )}
 
-        {/* Main Content Area - Mobile Optimized */}
-        <Card className="bg-card/70 mb-4 md:mb-6">
-          {/* Tabs - Mobile Friendly */}
-          <div className="border-b border-border overflow-x-auto">
-            <div className="flex min-w-max">
-              <button
-                onClick={() => setActiveTab("upcoming")}
-                className={`px-4 md:px-6 py-3 md:py-4 border-b-2 font-medium text-xs md:text-sm transition-colors whitespace-nowrap ${
-                  activeTab === "upcoming"
-                    ? "border-primary text-primary bg-primary/5"
-                    : "border-transparent text-muted-foreground hover:text-foreground hover:bg-accent/50"
-                }`}
-              >
-                <div className="flex items-center gap-1.5 md:gap-2">
-                  <Clock className="w-3.5 h-3.5 md:w-4 md:h-4" />
-                  <span className="hidden sm:inline">المواعيد القادمة</span>
-                  <span className="sm:hidden">قادمة</span>
-                  {stats.upcoming > 0 && (
-                    <span className="bg-primary/10 text-primary text-xs px-1.5 md:px-2 py-0.5 rounded-full">
-                      {stats.upcoming}
-                    </span>
-                  )}
-                </div>
-              </button>
-              
-              <button
-                onClick={() => setActiveTab("all")}
-                className={`px-4 md:px-6 py-3 md:py-4 border-b-2 font-medium text-xs md:text-sm transition-colors whitespace-nowrap ${
-                  activeTab === "all"
-                    ? "border-primary text-primary bg-primary/5"
-                    : "border-transparent text-muted-foreground hover:text-foreground hover:bg-accent/50"
-                }`}
-              >
-                <div className="flex items-center gap-1.5 md:gap-2">
-                  <CalendarDays className="w-3.5 h-3.5 md:w-4 md:h-4" />
-                  <span className="hidden sm:inline">جميع المواعيد</span>
-                  <span className="sm:hidden">الكل</span>
-                  {stats.total > 0 && (
-                    <span className="bg-accent text-foreground text-xs px-1.5 md:px-2 py-0.5 rounded-full">
-                      {stats.total}
-                    </span>
-                  )}
-                </div>
-              </button>
-            </div>
+        {/* Tabs - Modern Style matching Clinic Page */}
+        <div className="w-full mb-6">
+          <div className="inline-flex h-10 items-center justify-center rounded-md bg-muted p-1 text-muted-foreground w-full">
+            <button
+              onClick={() => setActiveTab("upcoming")}
+              className={`inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 flex-1 ${
+                activeTab === "upcoming"
+                  ? "bg-background text-foreground shadow-sm"
+                  : "hover:bg-background/50 hover:text-foreground"
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <Clock className="w-4 h-4" />
+                <span>المواعيد القادمة</span>
+                {stats.upcoming > 0 && (
+                  <span className="bg-primary/10 text-primary text-xs px-2 py-0.5 rounded-full mr-1">
+                    {stats.upcoming}
+                  </span>
+                )}
+              </div>
+            </button>
+            <button
+              onClick={() => setActiveTab("all")}
+              className={`inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 flex-1 ${
+                activeTab === "all"
+                  ? "bg-background text-foreground shadow-sm"
+                  : "hover:bg-background/50 hover:text-foreground"
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <CalendarDays className="w-4 h-4" />
+                <span>جميع المواعيد</span>
+                {stats.total > 0 && (
+                  <span className="bg-muted text-foreground text-xs px-2 py-0.5 rounded-full mr-1">
+                    {stats.total}
+                  </span>
+                )}
+              </div>
+            </button>
           </div>
+        </div>
 
-          {/* Content */}
+        {/* Content */}
+        <Card className="bg-card/70 mb-4 md:mb-6">
           <div className="p-0 md:p-4">
             {activeTab === "upcoming" ? (
               isUpcomingLoading ? (

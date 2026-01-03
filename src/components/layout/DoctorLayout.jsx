@@ -14,6 +14,7 @@ import {
   Bell,
   Clock,
   MessageCircleQuestion,
+  Share2,
 } from "lucide-react";
 import { NavLink, Outlet, Link, useLocation } from "react-router-dom";
 import { useAuth } from "../../features/auth/AuthContext";
@@ -181,6 +182,13 @@ export default function DoctorLayout() {
             isVisible={hasPatientsAccess}
             onClick={handleNavItemClick}
           />
+          <NavItem
+            to="/examinations"
+            icon={Stethoscope}
+            label="الكشوفات"
+            isVisible={hasPatientsAccess}
+            onClick={handleNavItemClick}
+          />
           
           <NavItem
             to="/clinic"
@@ -233,6 +241,13 @@ export default function DoctorLayout() {
             badgeCount={unreadCount}
           />
           <NavItem
+            to="/integrations"
+            icon={Share2}
+            label="التكاملات"
+            isVisible={hasSettingsAccess}
+            onClick={handleNavItemClick}
+          />
+          <NavItem
             to="/settings"
             icon={Settings}
             label="الإعدادات"
@@ -242,7 +257,7 @@ export default function DoctorLayout() {
           <NavItem
             to="/ask-tabibi"
             icon={MessageCircleQuestion}
-            label="اسأل Tabibi"
+            label=" Tabibi AI "
             isVisible={hasDashboardAccess}
             onClick={handleNavItemClick}
           />

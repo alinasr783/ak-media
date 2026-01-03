@@ -17,6 +17,9 @@ export async function getAppointments(search, page, pageSize, filters = {}) {
     const from = Math.max(0, (page - 1) * pageSize)
     const to = from + pageSize - 1
 
+    // Determine if we need inner join for search
+    const patientRelation = search ? 'patient:patients!inner(id, name, phone)' : 'patient:patients(id, name, phone)';
+
     let query = supabase
         .from("appointments")
         .select(`
@@ -27,7 +30,7 @@ export async function getAppointments(search, page, pageSize, filters = {}) {
       status,
       from,
       age,
-      patient:patients(id, name, phone),
+      ${patientRelation},
       created_at
     `, { count: "exact" })
         .eq("clinic_id", userData.clinic_id)
@@ -97,7 +100,7 @@ export async function getAppointments(search, page, pageSize, filters = {}) {
     // Apply search term if provided
     if (search) {
         const s = `%${search.trim()}%`
-        query = query.or(`patient.name.ilike.${s},patient.phone.ilike.${s}`)
+        query = query.or(`name.ilike.${s},phone.ilike.${s}`, { foreignTable: "patients" })
     }
 
     const { data, error, count } = await query

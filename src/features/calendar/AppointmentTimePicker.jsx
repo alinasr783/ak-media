@@ -140,24 +140,26 @@ export default function AppointmentTimePicker({
             <Clock className="w-4 h-4" />
             الوقت
           </Label>
-          <div className="grid grid-cols-3 gap-2">
-            {availableTimes.length > 0 ? (
-              availableTimes.map((time, index) => (
-                <Button
-                  key={index}
-                  type="button"
-                  variant={selectedTime === time ? "default" : "outline"}
-                  className={`h-11 ${selectedTime === time ? 'bg-primary' : 'border-gray-300'}`}
-                  onClick={() => onTimeChange(time)}
-                >
-                  {time}
-                </Button>
-              ))
-            ) : (
-              <div className="col-span-3 text-center py-4 text-gray-500">
-                لا توجد أوقات متاحة لهذا التاريخ
-              </div>
-            )}
+          <div className="max-h-80 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+            <div className="grid grid-cols-3 gap-2 pb-1">
+              {availableTimes.length > 0 ? (
+                availableTimes.map((time, index) => (
+                  <Button
+                    key={index}
+                    type="button"
+                    variant={selectedTime === time ? "default" : "outline"}
+                    className={`h-11 ${selectedTime === time ? 'bg-primary' : 'border-gray-300'}`}
+                    onClick={() => onTimeChange(time)}
+                  >
+                    {time}
+                  </Button>
+                ))
+              ) : (
+                <div className="col-span-3 text-center py-4 text-gray-500">
+                  لا توجد أوقات متاحة لهذا التاريخ
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}

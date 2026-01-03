@@ -11,25 +11,25 @@ export function Dialog({open, onClose, children}) {
   }, [open, onClose]);
 
   if (!open) return null;
-  return (
-    <div className="fixed inset-0 z-50 grid place-items-center">
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div
-        className={cn(
-          "relative z-10 w-[95vw] max-w-lg rounded-[var(--radius)] border border-border bg-card shadow-xl"
-        )}>
-        {children}
-      </div>
-    </div>
-  );
+  return children;
 }
 
 export function DialogHeader({children, className}) {
   return <div className={cn("p-6 pb-4", className)}>{children}</div>;
 }
 
-export function DialogContent({children, className}) {
-  return <div className={cn("p-6", className)}>{children}</div>;
+export function DialogContent({children, className, dir}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" dir={dir}>
+      <div className="absolute inset-0 bg-background/80 backdrop-blur-sm" />
+      <div className={cn(
+        "relative z-10 bg-card shadow-xl flex flex-col",
+        className
+      )}>
+        {children}
+      </div>
+    </div>
+  );
 }
 
 export function DialogTitle({children, className}) {

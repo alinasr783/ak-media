@@ -209,6 +209,19 @@ export default function VisitDetailPage() {
   };
 
   const handleGeneratePdf = async () => {
+    // Validation for required fields (Clinic Name, Address, User Name, Phone)
+    // As per requirement: if these are missing, prevent PDF generation and ask user to complete them
+    const missingFields = [];
+    if (!clinic?.name || clinic.name.trim() === '' || clinic.name === 'عيادة تجريبيّة') missingFields.push("اسم العيادة");
+    if (!clinic?.address || clinic.address.trim() === '' || clinic.address === 'عنوان العيادة التجريبيّة') missingFields.push("عنوان العيادة");
+    if (!user?.name || user.name.trim() === '') missingFields.push("الاسم الشخصي");
+    if (!user?.phone || user.phone.trim() === '') missingFields.push("رقم الهاتف");
+
+    if (missingFields.length > 0) {
+      alert(`عفواً، لا يمكن إنشاء الروشتة قبل إكمال البيانات التالية في صفحة الإعدادات:\n- ${missingFields.join('\n- ')}\n\nيرجى الذهاب إلى صفحة الإعدادات > بياناتك لإكمال هذه البيانات.`);
+      return;
+    }
+
     if (visit && clinic && user) {
       try {
         await generatePrescriptionPdfNew(

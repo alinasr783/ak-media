@@ -1,10 +1,16 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { ar } from "date-fns/locale";
-import { Check, X, User, Calendar, Clock, Phone, Tag, MessageSquare } from "lucide-react";
+import { Check, X, User, Calendar, Clock, Phone, Tag, MessageSquare, Eye, MoreHorizontal, CheckCircle, XCircle, Receipt } from "lucide-react";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { Card, CardContent } from "../../components/ui/card";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "../../components/ui/dropdown-menu";
 import {
   Dialog,
   DialogContent,
@@ -17,13 +23,14 @@ import toast from "react-hot-toast";
 import { cn } from "../../lib/utils";
 import { useNavigate } from "react-router-dom";
 import { useState } from "react";
+import usePlan from "../auth/usePlan";
 
 const statusMap = {
-  pending: { label: "جديد", variant: "warning" },
-  confirmed: { label: "مؤكد", variant: "success" },
-  rejected: { label: "مرفوض", variant: "destructive" },
-  completed: { label: "مكتمل", variant: "default" },
-  cancelled: { label: "ملغي", variant: "destructive" },
+  pending: { label: "جديد", variant: "warning", icon: Clock },
+  confirmed: { label: "مؤكد", variant: "success", icon: CheckCircle },
+  rejected: { label: "مرفوض", variant: "destructive", icon: XCircle },
+  completed: { label: "مكتمل", variant: "default", icon: CheckCircle },
+  cancelled: { label: "ملغي", variant: "destructive", icon: XCircle },
 };
 
 export default function OnlineBookingsTable({
@@ -33,6 +40,7 @@ export default function OnlineBookingsTable({
 }) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const { data: planData } = usePlan();
   const [showContactDialog, setShowContactDialog] = useState(false);
   const [selectedPhone, setSelectedPhone] = useState("");
   const [selectedPatientName, setSelectedPatientName] = useState("");
@@ -96,6 +104,63 @@ export default function OnlineBookingsTable({
     updateStatus({ id: appointmentId, status: "rejected" });
   };
 
+  const handleStatusChange = (appointmentId, newStatus) => {
+    updateStatus({ id: appointmentId, status: newStatus });
+  };
+
+  const handleViewDetails = (appointmentId) => {
+    navigate(`/appointments/${appointmentId}`);
+  };
+
+  // Check if WhatsApp feature is enabled in the plan
+  const isWhatsAppEnabled = planData?.plans?.limits?.features?.whatsapp === true;
+
+  const formatPhoneNumberForWhatsApp = (phone) => {
+    if (!phone) return "";
+
+    let formattedPhone = phone.replace(/\D/g, "");
+
+    if (formattedPhone.startsWith("0")) {
+      formattedPhone = "20" + formattedPhone.substring(1);
+    }
+
+    if (!formattedPhone.startsWith("20")) {
+      formattedPhone = "20" + formattedPhone;
+    }
+
+    return formattedPhone;
+  };
+
+  const generateReminderMessage = (patientName, appointmentDate) => {
+    const formattedDate = format(new Date(appointmentDate), "dd/MM/yyyy", {
+      locale: ar,
+    });
+    const formattedTime = format(new Date(appointmentDate), "hh:mm a", {
+      locale: ar,
+    });
+
+    return `مرحباً ${patientName}، هذا تذكير بموعدك في العيادة بتاريخ ${formattedDate} الساعة ${formattedTime}. نرجو الحضور قبل الموعد بـ15 دقيقة.`;
+  };
+
+  const handleSendReminder = (appointment) => {
+    if (!isWhatsAppEnabled) {
+      toast.error("ميزة الواتساب غير متوفرة في خطتك الحالية");
+      return;
+    }
+
+    const formattedPhone = formatPhoneNumberForWhatsApp(appointment.patient?.phone);
+
+    if (!formattedPhone) {
+      toast.error("رقم الهاتف غير صحيح");
+      return;
+    }
+
+    const message = generateReminderMessage(appointment.patient?.name, appointment.date);
+    const encodedMessage = encodeURIComponent(message);
+    const whatsappUrl = `https://wa.me/${formattedPhone}?text=${encodedMessage}`;
+    window.open(whatsappUrl, "_blank");
+  };
+
   const handlePhoneClick = (phone, patientName) => {
     if (!phone) return;
     setSelectedPhone(phone);
@@ -131,11 +196,14 @@ export default function OnlineBookingsTable({
     {
       header: "الحالة",
       accessor: "status",
-      render: (appointment) => (
-        <Badge variant={statusMap[appointment.status]?.variant || "secondary"}>
-          {statusMap[appointment.status]?.label || appointment.status}
-        </Badge>
-      ),
+      render: (appointment) => {
+        const status = appointment.status?.toLowerCase() || 'pending';
+        return (
+          <Badge variant={statusMap[status]?.variant || "secondary"}>
+            {statusMap[status]?.label || appointment.status}
+          </Badge>
+        );
+      },
     },
     {
       header: "تاريخ الحجز",
@@ -179,9 +247,11 @@ export default function OnlineBookingsTable({
     },
     {
       header: "",
-      render: (appointment) => (
+    render: (appointment) => {
+      const status = appointment.status?.toLowerCase() || 'pending';
+      return (
         <div className="flex items-center gap-2">
-          {appointment.status === "pending" && (
+          {status === "pending" && (
             <>
               <Button
                 size="sm"
@@ -204,117 +274,134 @@ export default function OnlineBookingsTable({
             </>
           )}
           
-          {appointment.status === "confirmed" && (
+          {status === "confirmed" && (
             <Badge variant="success">مقبول</Badge>
           )}
           
-          {appointment.status === "rejected" && (
+          {status === "rejected" && (
             <Badge variant="destructive">مرفوض</Badge>
           )}
         </div>
-      ),
+      );
     },
+  },
   ];
 
   // Mobile Card Component for Online Bookings
   const OnlineBookingCard = ({ appointment }) => {
-    const statusInfo = statusMap[appointment.status] || statusMap.pending;
-    const isPending = appointment.status === "pending";
-    const isConfirmed = appointment.status === "confirmed";
-    const isRejected = appointment.status === "rejected";
+    const status = appointment.status?.toLowerCase() || 'pending';
+    const statusInfo = statusMap[status] || statusMap.pending;
+    const StatusIcon = statusInfo.icon || Clock;
 
     return (
-      <Card className="mb-3 bg-card/70 hover:shadow-md transition-shadow">
-        <CardContent className="p-3">
-          {/* Header */}
-          <div className="flex items-start justify-between mb-3 gap-2">
-            <div className="flex items-center gap-2 flex-1 min-w-0">
-              <div className="w-10 h-10 rounded-lg bg-green-500/10 text-green-600 flex items-center justify-center flex-shrink-0">
-                <User className="w-5 h-5" />
+      <div className="mb-4 pb-4 border-b border-border last:border-0 last:mb-0 last:pb-0">
+        <div className="p-1">
+          {/* Header - اسم المريض والحالة */}
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex items-center gap-3 flex-1">
+              <div className="w-12 h-12 rounded-lg bg-primary/10 text-primary flex items-center justify-center flex-shrink-0">
+                <User className="w-6 h-6" />
               </div>
               <div className="flex-1 min-w-0">
                 <Button 
                   variant="link" 
-                  className="font-bold text-base p-0 h-auto hover:text-primary truncate w-full text-right"
+                  className="font-bold text-lg p-0 h-auto text-right hover:text-primary"
                   onClick={() => navigate(`/patients/${appointment.patient?.id}`)}>
                   {appointment.patient?.name || "مش محدد"}
                 </Button>
                 <Button 
                   variant="link" 
-                  className="flex items-center gap-1 text-muted-foreground text-xs p-0 h-auto hover:text-primary w-full"
+                  className="flex items-center gap-1.5 text-muted-foreground text-sm p-0 h-auto hover:text-primary"
                   onClick={() => handlePhoneClick(appointment.patient?.phone, appointment.patient?.name)}>
-                  <Phone className="w-3 h-3 flex-shrink-0" />
                   <span className="truncate">{appointment.patient?.phone || "-"}</span>
                 </Button>
               </div>
             </div>
-            <Badge variant={statusInfo.variant} className="flex-shrink-0 text-xs">
+            <Badge variant={statusInfo.variant} className="gap-1.5 flex-shrink-0">
+              <StatusIcon className="w-3.5 h-3.5" />
               {statusInfo.label}
             </Badge>
           </div>
 
-          {/* معلومات الحجز */}
-          <div className="space-y-2 mb-3 bg-accent/50 rounded-lg p-2.5">
-            <div className="flex items-center gap-2 text-xs flex-wrap">
-              <div className="flex items-center gap-1">
-                <Calendar className="w-3.5 h-3.5 text-green-600 flex-shrink-0" />
-                <span className="font-medium text-foreground">
-                  {appointment.date ? format(new Date(appointment.date), "dd/MM/yyyy", { locale: ar }) : "مش محدد"}
-                </span>
-              </div>
+          {/* معلومات الموعد */}
+          <div className="space-y-2.5 mb-4 bg-accent/50 rounded-lg p-3">
+            <div className="flex items-center gap-2 text-sm">
+              <Calendar className="w-4 h-4 text-primary flex-shrink-0" />
+              <span className="font-medium text-foreground">
+                {appointment.date ? format(new Date(appointment.date), "dd/MM/yyyy", { locale: ar }) : "مش محدد"}
+              </span>
               <span className="text-muted-foreground">•</span>
-              <div className="flex items-center gap-1">
-                <Clock className="w-3.5 h-3.5 text-green-600 flex-shrink-0" />
-                <span className="font-medium text-foreground">
-                  {appointment.date ? format(new Date(appointment.date), "hh:mm a", { locale: ar }) : "مش محدد"}
-                </span>
-              </div>
+              <Clock className="w-4 h-4 text-primary flex-shrink-0" />
+              <span className="font-medium text-foreground">
+                {appointment.date ? format(new Date(appointment.date), "hh:mm a", { locale: ar }) : "مش محدد"}
+              </span>
             </div>
             
             {appointment.notes && (
-              <div className="flex items-start gap-1.5 text-xs">
-                <Tag className="w-3.5 h-3.5 text-purple-600 flex-shrink-0 mt-0.5" />
-                <span className="text-muted-foreground flex-1 break-words">{appointment.notes}</span>
+              <div className="flex items-start gap-2 text-sm">
+                <Tag className="w-4 h-4 text-purple-600 flex-shrink-0 mt-0.5" />
+                <span className="text-muted-foreground flex-1">{appointment.notes}</span>
               </div>
             )}
+            
+            <div className="flex items-center gap-2 text-sm">
+              <Receipt className="w-4 h-4 text-green-600 flex-shrink-0" />
+              <span className="font-bold text-foreground">
+                {appointment.price ? appointment.price.toFixed(2) : "0.00"} جنيه
+              </span>
+            </div>
           </div>
 
           {/* الأزرار */}
-          {isPending && (
-            <div className="flex items-center gap-2">
-              <Button
-                onClick={() => handleAccept(appointment.id)}
-                className="flex-1 bg-green-600 hover:bg-green-700 text-white h-9 text-xs"
-                size="sm"
-              >
-                <Check className="w-3.5 h-3.5 ml-1" />
-                قبول
-              </Button>
-              <Button
-                onClick={() => handleReject(appointment.id)}
-                variant="outline"
-                className="flex-1 border-red-300 text-red-700 hover:bg-red-50 h-9 text-xs"
-                size="sm"
-              >
-                <X className="w-3.5 h-3.5 ml-1" />
-                رفض
-              </Button>
-            </div>
-          )}
-          
-          {isConfirmed && (
-            <div className="text-center py-1.5">
-              <Badge variant="success" className="text-xs px-3 py-1">تم القبول</Badge>
-            </div>
-          )}
-          
-          {isRejected && (
-            <div className="text-center py-1.5">
-              <Badge variant="destructive" className="text-xs px-3 py-1">تم الرفض</Badge>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+          <div className="flex items-center gap-2">
+            <Button
+              onClick={() => handleViewDetails(appointment.id)}
+              className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground h-10"
+              size="sm"
+            >
+              <Eye className="w-4 h-4 ml-2" />
+              شوف التفاصيل
+            </Button>
+            
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-10 px-3"
+              onClick={() => handleSendReminder(appointment)}
+              disabled={!isWhatsAppEnabled}
+              title="ابعت تذكير واتساب"
+            >
+              <MessageSquare className="w-4 h-4" />
+            </Button>
+            
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="h-10 px-3">
+                  <MoreHorizontal className="w-4 h-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuItem onClick={() => handleStatusChange(appointment.id, "confirmed")}>
+                  <CheckCircle className="h-4 w-4 ml-2" />
+                  قبول (مؤكد)
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleStatusChange(appointment.id, "rejected")}>
+                  <XCircle className="h-4 w-4 ml-2" />
+                  رفض
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleStatusChange(appointment.id, "pending")}>
+                  <Clock className="h-4 w-4 ml-2" />
+                  قيد الانتظار
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleStatusChange(appointment.id, "cancelled")}>
+                  <XCircle className="h-4 w-4 ml-2" />
+                  ملغي
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        </div>
+      </div>
     );
   };
 

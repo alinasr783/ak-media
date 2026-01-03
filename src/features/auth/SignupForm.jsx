@@ -6,13 +6,21 @@ import { Input } from "../../components/ui/input"
 import { generateClinicId } from "../../lib/clinicIdGenerator"
 import useSignup from "./useSignup"
 import useVerifyClinicId from "./useVerifyClinicId"
-import { checkEmailExists } from "../../services/apiAuth"
-import { Mail, User, Building2, CheckCircle2 } from "lucide-react"
+import { checkEmailExists, signInWithGoogle } from "../../services/apiAuth"
+import { Mail, User, Building2, CheckCircle2, X, Stethoscope, FileText } from "lucide-react"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "../../components/ui/dialog"
+import { Label } from "../../components/ui/label"
 
 const STEPS = {
   ACCOUNT_INFO: 1,
   PERSONAL_INFO: 2,
   ROLE_SPECIFIC: 3,
+  CERTIFICATIONS: 4,
 }
 
 export default function SignupForm() {
@@ -26,6 +34,25 @@ export default function SignupForm() {
   const [verifiedClinicId, setVerifiedClinicId] = useState("")
   const [isCheckingEmail, setIsCheckingEmail] = useState(false)
   const [step3Touched, setStep3Touched] = useState(false)
+  const [certifications, setCertifications] = useState([])
+  const [skills, setSkills] = useState([])
+  const [currentCertificate, setCurrentCertificate] = useState({
+    name: '',
+    issuing_organization: '',
+    description: '',
+    certificate_file: null
+  })
+
+  // Google Signup State
+  const [googleSignupState, setGoogleSignupState] = useState({
+    isOpen: false,
+    role: "",
+    clinicName: "",
+    clinicAddress: "",
+    clinicId: "",
+    verificationStatus: null, // null, 'success', 'error'
+    verificationMessage: ""
+  })
 
   const {
     register,
@@ -41,6 +68,73 @@ export default function SignupForm() {
   const password = watch("password")
   const role = watch("role")
   const clinicIdInput = watch("clinicId")
+
+  // Google Signup Handlers
+  function handleGoogleVerifyClinic() {
+    if (!googleSignupState.clinicId) {
+      setGoogleSignupState(prev => ({
+        ...prev,
+        verificationStatus: 'error',
+        verificationMessage: "لازم تدخل معرف العيادة"
+      }))
+      return
+    }
+
+    verifyClinic(googleSignupState.clinicId, {
+      onSuccess: () => {
+        setGoogleSignupState(prev => ({
+          ...prev,
+          verificationStatus: 'success',
+          verificationMessage: "تم التحقق بنجاح"
+        }))
+      },
+      onError: (error) => {
+        setGoogleSignupState(prev => ({
+          ...prev,
+          verificationStatus: 'error',
+          verificationMessage: error.message || "معرف العيادة ده مش موجود"
+        }))
+      },
+    })
+  }
+
+  async function handleGoogleSignup() {
+    const { role, clinicId, verificationStatus } = googleSignupState;
+    
+    if (!role) {
+        toast.error("لازم تختار نوع الحساب");
+        return;
+    }
+
+    let pendingData = { role };
+
+    if (role === 'doctor') {
+        // Clinic details will be set to defaults/empty as requested
+        pendingData.clinicName = "";
+        pendingData.clinicAddress = "";
+        pendingData.clinicId = generateClinicId();
+    } else if (role === 'secretary') {
+        if (!clinicId) {
+            toast.error("لازم تدخل معرف العيادة");
+            return;
+        }
+        if (verificationStatus !== 'success') {
+             toast.error("لازم تتحقق من معرف العيادة الأول");
+             return;
+        }
+         pendingData.clinicId = clinicId;
+         pendingData.permissions = [];
+    }
+
+    localStorage.setItem('pending_google_signup', JSON.stringify(pendingData));
+    
+    try {
+      await signInWithGoogle();
+    } catch (e) {
+      console.error(e);
+      toast.error("حصل خطأ في التسجيل بجوجل");
+    }
+  }
 
   async function handleNextStep() {
     let fieldsToValidate = []
@@ -84,6 +178,20 @@ export default function SignupForm() {
         setGeneratedClinicId(clinicId)
       }
       setCurrentStep((prev) => prev + 1)
+    } else if (currentStep === STEPS.ROLE_SPECIFIC) {
+      // Validate role-specific fields before moving to certifications
+      if (role === "doctor") {
+        fieldsToValidate = ["clinicName", "clinicAddress"]
+        const isValid = await trigger(fieldsToValidate)
+        if (!isValid) {
+          toast.error("لازم تملى كل الحقول المطلوبة")
+          return
+        }
+      } else if (role === "secretary" && !verifiedClinicId) {
+        toast.error("لازم تتحقق من معرف العيادة الأول")
+        return
+      }
+      setCurrentStep((prev) => prev + 1)
     }
   }
 
@@ -124,6 +232,66 @@ export default function SignupForm() {
         setVerifiedClinicId("")
       },
     })
+  }
+
+  // Certification handlers
+  function handleCertificateInputChange(field, value) {
+    setCurrentCertificate(prev => ({
+      ...prev,
+      [field]: value
+    }))
+  }
+
+  async function handleCertificateFileChange(e) {
+    const file = e.target.files?.[0]
+    if (file) {
+      setCurrentCertificate(prev => ({
+        ...prev,
+        certificate_file: file
+      }))
+    }
+  }
+
+  function handleAddCertificate() {
+    if (!currentCertificate.name || !currentCertificate.issuing_organization) {
+      toast.error("لازم تدخل اسم الشهادة والمنظمة")
+      return
+    }
+
+    setCertifications(prev => [...prev, { ...currentCertificate, id: Date.now() }])
+    setCurrentCertificate({
+      name: '',
+      issuing_organization: '',
+      description: '',
+      certificate_file: null
+    })
+    toast.success("تم إضافة الشهادة")
+  }
+
+  function handleRemoveCertificate(id) {
+    setCertifications(prev => prev.filter(cert => cert.id !== id))
+    toast.success("تم حذف الشهادة")
+  }
+
+  // Skills handlers
+  function handleAddSkill(skillName) {
+    if (!skillName || skillName.trim().length === 0) {
+      toast.error("لازم تدخل اسم المهارة")
+      return
+    }
+
+    if (skills.find(s => s.name.toLowerCase() === skillName.toLowerCase())) {
+      toast.error("المهارة دي موجودة قبل كده")
+      return
+    }
+
+    setSkills(prev => [...prev, { name: skillName, id: Date.now() }])
+    toast.success("تم إضافة المهارة")
+  }
+
+  function handleRemoveSkill(id) {
+    setSkills(prev => prev.filter(skill => skill.id !== id))
+    toast.success("تم حذف المهارة")
   }
 
   async function handleCreateAccount() {
@@ -256,9 +424,11 @@ export default function SignupForm() {
     { number: 1, title: "معلومات الحساب", icon: Mail },
     { number: 2, title: "المعلومات الشخصية", icon: User },
     { number: 3, title: "تفاصيل الدور", icon: Building2 },
+    { number: 4, title: "الشهادات والمهارات", icon: CheckCircle2 },
   ];
 
   return (
+    <>
     <form 
       onSubmit={(e) => {
         e.preventDefault()
@@ -321,6 +491,28 @@ export default function SignupForm() {
       {/* Step 1: Account Information */}
       {currentStep === STEPS.ACCOUNT_INFO && (
         <div className="space-y-4 animate-in fade-in slide-in-from-right-5 duration-300">
+          <Button 
+              variant="outline" 
+              type="button" 
+              className="w-full mb-4" 
+              onClick={() => setGoogleSignupState(prev => ({ ...prev, isOpen: true }))}
+          >
+              <svg className="mr-2 h-4 w-4" aria-hidden="true" focusable="false" data-prefix="fab" data-icon="google" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 488 512">
+                  <path fill="currentColor" d="M488 261.8C488 403.3 391.1 504 248 504 110.8 504 0 393.2 0 256S110.8 8 248 8c66.8 0 123 24.5 166.3 64.9l-67.5 64.9C258.5 52.6 94.3 116.6 94.3 256c0 86.5 69.1 156.6 153.7 156.6 98.2 0 135-70.4 140.8-106.9H248v-85.3h236.1c2.3 12.7 3.9 24.9 3.9 41.4z"></path>
+              </svg>
+              تسجيل حساب باستخدام جوجل
+          </Button>
+          <div className="relative mb-4">
+              <div className="absolute inset-0 flex items-center">
+                  <span className="w-full border-t" />
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-background px-2 text-muted-foreground">
+                  أو بالبريد الإلكتروني
+                  </span>
+              </div>
+          </div>
+
           <h3 className="text-lg font-semibold text-primary flex items-center gap-2">
             <Mail className="size-5" />
             معلومات الحساب
@@ -499,13 +691,13 @@ export default function SignupForm() {
             <>
               <div className="space-y-2">
                 <label htmlFor="clinicName" className="text-sm font-medium">
-                  اسم العيادة *
+                  اسم العيادة
                 </label>
                 <Input
                   id="clinicName"
                   type="text"
                   {...register("clinicName", {
-                    required: step3Touched ? "لازم تدخل اسم العيادة" : false,
+                    required: false,
                     minLength: {
                       value: 3,
                       message: "اسم العيادة لازم 3 أحرف على الأقل",
@@ -522,13 +714,13 @@ export default function SignupForm() {
 
               <div className="space-y-2">
                 <label htmlFor="clinicAddress" className="text-sm font-medium">
-                  عنوان العيادة *
+                  عنوان العيادة
                 </label>
                 <Input
                   id="clinicAddress"
                   type="text"
                   {...register("clinicAddress", {
-                    required: step3Touched ? "لازم تدخل عنوان العيادة" : false,
+                    required: false,
                     minLength: {
                       value: 5,
                       message: "عنوان العيادة لازم 5 أحرف على الأقل",
@@ -634,6 +826,89 @@ export default function SignupForm() {
           </Button>
         )}
       </div>
-    </form>
+      </form>
+
+      <Dialog open={googleSignupState.isOpen} onOpenChange={(open) => setGoogleSignupState(prev => ({ ...prev, isOpen: open }))}>
+        <DialogContent className="sm:max-w-[600px] p-6 sm:p-10">
+           <button 
+             onClick={() => setGoogleSignupState(prev => ({ ...prev, isOpen: false }))}
+             className="absolute left-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground"
+           >
+             <X className="h-4 w-4" />
+             <span className="sr-only">Close</span>
+           </button>
+           <DialogHeader className="p-0 pb-4 text-center">
+             <DialogTitle>اختر نوع الحساب للمتابعة</DialogTitle>
+           </DialogHeader>
+           
+           <div className="grid gap-6 py-4">
+              <div className="grid grid-cols-2 gap-4">
+                  <div 
+                    className={`cursor-pointer rounded-xl border-2 p-4 hover:border-primary hover:bg-primary/5 transition-all duration-200 flex flex-col items-center gap-3 text-center ${googleSignupState.role === 'doctor' ? 'border-primary bg-primary/10' : 'border-muted'}`}
+                    onClick={() => setGoogleSignupState(prev => ({ ...prev, role: 'doctor' }))}
+                  >
+                    <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+                        <Stethoscope className="h-6 w-6 text-primary" />
+                    </div>
+                    <div>
+                        <div className="font-semibold">طبيب</div>
+                        <div className="text-xs text-muted-foreground mt-1">لإدارة عيادتك والمرضى</div>
+                    </div>
+                  </div>
+
+                  <div 
+                    className={`cursor-pointer rounded-xl border-2 p-4 hover:border-primary hover:bg-primary/5 transition-all duration-200 flex flex-col items-center gap-3 text-center ${googleSignupState.role === 'secretary' ? 'border-primary bg-primary/10' : 'border-muted'}`}
+                    onClick={() => setGoogleSignupState(prev => ({ ...prev, role: 'secretary' }))}
+                  >
+                    <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+                        <FileText className="h-6 w-6 text-primary" />
+                    </div>
+                    <div>
+                        <div className="font-semibold">سكرتير</div>
+                        <div className="text-xs text-muted-foreground mt-1">لمساعدة الطبيب في الإدارة</div>
+                    </div>
+                  </div>
+              </div>
+
+              {googleSignupState.role === 'secretary' && (
+                  <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
+                      <Label>معرف العيادة</Label>
+                      <div className="flex gap-2">
+                          <Input 
+                              value={googleSignupState.clinicId}
+                              onChange={(e) => setGoogleSignupState(prev => ({ 
+                                  ...prev, 
+                                  clinicId: e.target.value,
+                                  verificationStatus: null 
+                              }))}
+                              placeholder="أدخل معرف العيادة"
+                          />
+                          <Button type="button" onClick={handleGoogleVerifyClinic} disabled={isVerifying}>
+                              {isVerifying ? "..." : "تحقق"}
+                          </Button>
+                      </div>
+                      {googleSignupState.verificationMessage && (
+                          <p className={`text-sm ${googleSignupState.verificationStatus === 'success' ? 'text-green-500' : 'text-red-500'}`}>
+                              {googleSignupState.verificationMessage}
+                          </p>
+                      )}
+                  </div>
+              )}
+
+              <Button 
+                type="button" 
+                onClick={handleGoogleSignup} 
+                className="w-full mt-2"
+                disabled={!googleSignupState.role}
+              >
+                  <svg className="mr-2 h-4 w-4" aria-hidden="true" focusable="false" data-prefix="fab" data-icon="google" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 488 512">
+                      <path fill="currentColor" d="M488 261.8C488 403.3 391.1 504 248 504 110.8 504 0 393.2 0 256S110.8 8 248 8c66.8 0 123 24.5 166.3 64.9l-67.5 64.9C258.5 52.6 94.3 116.6 94.3 256c0 86.5 69.1 156.6 153.7 156.6 98.2 0 135-70.4 140.8-106.9H248v-85.3h236.1c2.3 12.7 3.9 24.9 3.9 41.4z"></path>
+                  </svg>
+                  متابعة باستخدام جوجل
+              </Button>
+           </div>
+        </DialogContent>
+      </Dialog>
+    </>
   )
 }

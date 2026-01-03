@@ -189,17 +189,13 @@ export async function updateClinic({ name, address, booking_price, available_tim
   }
 
   // Prepare update data
-  const updateData = {
-    name,
-    address,
-    booking_price: parseFloat(booking_price) || 0,
-    available_time,
-  };
-
-  // Only include online_booking_enabled if it's defined
-  if (online_booking_enabled !== undefined) {
-    updateData.online_booking_enabled = online_booking_enabled;
-  }
+  const updateData = {};
+  
+  if (name !== undefined) updateData.name = name;
+  if (address !== undefined) updateData.address = address;
+  if (booking_price !== undefined) updateData.booking_price = parseFloat(booking_price) || 0;
+  if (available_time !== undefined) updateData.available_time = available_time;
+  if (online_booking_enabled !== undefined) updateData.online_booking_enabled = online_booking_enabled;
 
   console.log("updateClinic: Updating clinic with data:", updateData);
 

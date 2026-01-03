@@ -209,7 +209,8 @@ export default function AppointmentsTable({
       header: "الحالة",
       accessor: "status",
       render: (appointment) => {
-        const statusInfo = statusMap[appointment.status] || statusMap.pending;
+        const status = appointment.status?.toLowerCase() || 'pending';
+        const statusInfo = statusMap[status] || statusMap.pending;
         const StatusIcon = statusInfo.icon;
         return (
           <Badge variant={statusInfo.variant} className="gap-1.5">
@@ -286,12 +287,13 @@ export default function AppointmentsTable({
 
   // Mobile Card Component
   const AppointmentCard = ({ appointment }) => {
-    const statusInfo = statusMap[appointment.status] || statusMap.pending;
+    const status = appointment.status?.toLowerCase() || 'pending';
+    const statusInfo = statusMap[status] || statusMap.pending;
     const StatusIcon = statusInfo.icon;
 
     return (
-      <Card className="mb-3 bg-card/70 hover:shadow-md transition-shadow">
-        <CardContent className="p-4">
+      <div className="mb-4 pb-4 border-b border-border last:border-0 last:mb-0 last:pb-0">
+        <div className="p-1">
           {/* Header - اسم المريض والحالة */}
           <div className="flex items-start justify-between mb-3">
             <div className="flex items-center gap-3 flex-1">
@@ -309,7 +311,6 @@ export default function AppointmentsTable({
                   variant="link" 
                   className="flex items-center gap-1.5 text-muted-foreground text-sm p-0 h-auto hover:text-primary"
                   onClick={() => handlePhoneClick(appointment.patient?.phone, appointment.patient?.name)}>
-                  <Phone className="w-3.5 h-3.5" />
                   <span className="truncate">{appointment.patient?.phone || "-"}</span>
                 </Button>
               </div>
@@ -397,8 +398,8 @@ export default function AppointmentsTable({
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     );
   };
 

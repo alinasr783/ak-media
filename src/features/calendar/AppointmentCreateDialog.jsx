@@ -202,7 +202,7 @@ export default function AppointmentCreateDialog({ open, onClose }) {
   return (
     <>
       <Dialog open={open} onOpenChange={handleClose}>
-        <DialogContent className="sm:max-w-[550px] w-[95vw] max-h-[92vh] p-0 rounded-xl" dir="rtl">
+        <DialogContent className="sm:max-w-[600px] w-[95vw] max-w-[95vw] max-h-[90vh] p-0 rounded-xl overflow-hidden border border-border" dir="rtl">
           {/* Header */}
           <DialogHeader className="p-4 sticky top-0 z-10 bg-background border-b border-border">
             <div className="flex items-center justify-between">
@@ -241,7 +241,7 @@ export default function AppointmentCreateDialog({ open, onClose }) {
           </DialogHeader>
 
           {/* Content */}
-          <div className="flex-1 overflow-y-auto p-4 max-h-[calc(92vh-80px)] [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+          <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 max-h-[calc(90vh-80px)] [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
             <form onSubmit={handleSubmit(onSubmit)} onKeyDown={handleKeyDown} className="space-y-6">
               {/* الخطوة 1: اختيار المريض والموعد */}
               {step === 1 && (
@@ -375,7 +375,7 @@ export default function AppointmentCreateDialog({ open, onClose }) {
                     </div>
 
                     {/* التقويم واختيار الوقت */}
-                    <div className="rounded-lg border border-border overflow-hidden">
+                    <div className="rounded-lg overflow-hidden">
                       <AppointmentTimePicker
                         selectedDate={selectedDate}
                         onDateChange={handleDateChange}
@@ -384,7 +384,6 @@ export default function AppointmentCreateDialog({ open, onClose }) {
                         clinicAvailableTime={clinicData?.available_time}
                         autoSelectFirstAvailable={autoSelectEnabled}
                         className="w-full"
-                        mobileView={true}
                       />
                     </div>
 

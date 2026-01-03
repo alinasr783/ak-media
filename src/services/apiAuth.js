@@ -1,4 +1,5 @@
 import supabase from "./supabase"
+import { generateClinicId } from "../lib/clinicIdGenerator"
 
 // Check if email already exists
 export async function checkEmailExists(email) {
@@ -10,6 +11,39 @@ export async function checkEmailExists(email) {
     
     if (error && error.code !== 'PGRST116') throw error
     return !!data
+}
+
+export async function signInWithGoogle() {
+    const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+            redirectTo: `${window.location.origin}/dashboard`,
+            queryParams: {
+                access_type: 'offline',
+                prompt: 'consent',
+            },
+        },
+    })
+
+    if (error) throw new Error(error.message)
+    return data
+}
+
+export async function linkGoogleAccount(scope) {
+    const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+            redirectTo: `${window.location.origin}/integrations?google_auth_callback=true`,
+            scopes: scope,
+            queryParams: {
+                access_type: 'offline',
+                prompt: 'consent',
+            },
+        },
+    })
+
+    if (error) throw new Error(error.message)
+    return data
 }
 
 export async function signup({ email, password, userData }) {
@@ -80,8 +114,8 @@ export async function signup({ email, password, userData }) {
             {
                 clinic_uuid: userData.clinicId, // Use clinic_uuid as the main identifier
                 clinic_id_bigint: null, // Don't set clinic_id_bigint for new records
-                name: userData.clinicName.trim(),
-                address: userData.clinicAddress.trim(),
+                name: (userData.clinicName || "").trim(),
+                address: (userData.clinicAddress || "").trim(),
             },
         ])
 
@@ -126,19 +160,61 @@ export async function getCurrentUser() {
     try {
         // First, get the session
         console.log("getCurrentUser: Attempting to fetch session");
-        const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
         
-        if (sessionError) {
-            console.error("Session error:", sessionError);
+        // Helper to get session with a wait mechanism
+        const getSessionWithWait = async () => {
+            // 1. Try immediate session
+            const { data: { session }, error } = await supabase.auth.getSession();
+            if (error) {
+                console.error("getCurrentUser: Initial session check error:", error);
+            }
+            if (session) return session;
+
+            // 2. Check if we are in an OAuth redirect flow
+            // Implicit flow uses hash with access_token
+            // PKCE flow uses query params with code
+            const isOAuthRedirect = 
+                (window.location.hash && window.location.hash.includes('access_token')) ||
+                (window.location.search && window.location.search.includes('code='));
+
+            if (!isOAuthRedirect) {
+                console.log("getCurrentUser: No session and no OAuth redirect detected");
+                return null;
+            }
+
+            // 3. If in OAuth flow but no session yet, wait for SIGNED_IN event
+            console.log("getCurrentUser: OAuth redirect detected, waiting for auth state change...");
+            
+            return new Promise((resolve) => {
+                const timeoutId = setTimeout(() => {
+                    console.log("getCurrentUser: Auth wait timeout");
+                    resolve(null);
+                }, 5000); // Wait up to 5 seconds for OAuth processing
+
+                const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+                    if (event === 'SIGNED_IN' && session) {
+                        console.log("getCurrentUser: Detected SIGNED_IN event");
+                        clearTimeout(timeoutId);
+                        subscription.unsubscribe();
+                        resolve(session);
+                    } else if (event === 'SIGNED_OUT') {
+                         // If we explicitly get signed out, no need to wait further
+                         console.log("getCurrentUser: Detected SIGNED_OUT event");
+                         clearTimeout(timeoutId);
+                         subscription.unsubscribe();
+                         resolve(null);
+                    }
+                });
+            });
+        };
+
+        const session = await getSessionWithWait();
+        
+        if (!session) {
+            console.log("getCurrentUser: No session found after checks");
             return null;
         }
         
-        if (!sessionData || !sessionData.session) {
-            console.log("getCurrentUser: No session found");
-            return null;
-        }
-        
-        const session = sessionData.session;
         console.log("getCurrentUser: Session found, fetching user data for user_id:", session.user.id);
         
         // Try to fetch user data with a timeout wrapper
@@ -151,6 +227,65 @@ export async function getCurrentUser() {
                 .single();
             
             if (userError) {
+                // If user not found, check if we have pending google signup data
+                if (userError.code === 'PGRST116') { // no rows found
+                    const pendingSignupJson = localStorage.getItem('pending_google_signup');
+                    if (pendingSignupJson) {
+                        console.log("Found pending Google signup data, creating user profile...");
+                        const pendingData = JSON.parse(pendingSignupJson);
+                        
+                        // Insert user
+                        const { error: insertError } = await supabase.from("users").insert([
+                            {
+                                user_id: session.user.id,
+                                email: session.user.email,
+                                name: pendingData.name || session.user.user_metadata.full_name || "User",
+                                phone: pendingData.phone || "",
+                                role: pendingData.role,
+                                clinic_id: pendingData.clinicId,
+                                permissions: pendingData.permissions || null,
+                            },
+                        ]);
+
+                        if (insertError) {
+                            console.error("Error creating user profile from Google signup:", insertError);
+                            throw insertError;
+                        }
+
+                        // If doctor, create clinic
+                        if (pendingData.role === "doctor") {
+                             const { error: clinicError } = await supabase.from("clinics").insert([
+                                {
+                                    clinic_uuid: pendingData.clinicId,
+                                    name: pendingData.clinicName,
+                                    address: pendingData.clinicAddress,
+                                    clinic_id_bigint: null
+                                },
+                            ]);
+                            
+                            if (clinicError) {
+                                console.error("Error creating clinic from Google signup:", clinicError);
+                            }
+                        }
+
+                        // Clear local storage
+                        localStorage.removeItem('pending_google_signup');
+
+                        // Return the new user data
+                         return {
+                             data: {
+                                user_id: session.user.id,
+                                email: session.user.email,
+                                name: pendingData.name || session.user.user_metadata.full_name,
+                                phone: pendingData.phone,
+                                role: pendingData.role,
+                                clinic_id: pendingData.clinicId,
+                                permissions: pendingData.permissions,
+                             },
+                             error: null
+                        };
+                    }
+                }
                 throw userError;
             }
             

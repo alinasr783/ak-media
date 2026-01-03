@@ -214,7 +214,7 @@ export default function BookingPage() {
         <div className="bg-white border-b border-gray-200 py-5">
           <div className="max-w-2xl mx-auto px-4 text-center">
             <h1 className="text-lg font-bold text-gray-900">{clinic?.name}</h1>
-            <p className="text-gray-600 text-sm mt-1">احجز معادك بسهولة</p>
+            <p className="text-gray-600 text-sm mt-1">احجز معادك في دقيقة</p>
           </div>
         </div>
       </div>

@@ -6,7 +6,7 @@ import { createAppointment, updateAppointment, deleteAppointment } from "./apiAp
 import { createVisit, updateVisit, deleteVisit } from "./apiVisits";
 import { addSecretary } from "./apiAuth";
 import { updateClinic } from "./apiClinic";
-import { 
+import {
   sendMessageToAI as originalSendMessageToAI,
   sendMessageToAIStream as originalSendMessageToAIStream,
   ai,
@@ -22,15 +22,15 @@ import {
 async function getClinicContext() {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) throw new Error("مش مسجل دخول");
-  
+
   const { data: userData } = await supabase
     .from('users')
     .select('clinic_id, role')
     .eq('user_id', session.user.id)
     .single();
-  
+
   if (!userData?.clinic_id) throw new Error("مفيش عيادة");
-  
+
   return { userId: session.user.id, clinicId: userData.clinic_id, role: userData.role };
 }
 
@@ -41,7 +41,7 @@ async function findNextAvailableSlot(date, startHour, clinicId) {
     const timeStr = `${hour.toString().padStart(2, '0')}:00`;
     const startTime = `${date}T${timeStr}:00`;
     const endTime = `${date}T${hour}:59:59`;
-    
+
     const { count } = await supabase
       .from('appointments')
       .select('*', { count: 'exact', head: true })
@@ -49,7 +49,7 @@ async function findNextAvailableSlot(date, startHour, clinicId) {
       .gte('date', startTime)
       .lte('date', endTime)
       .in('status', ['pending', 'confirmed', 'in_progress']);
-    
+
     if (count < 3) {
       return {
         time: timeStr,
@@ -57,7 +57,7 @@ async function findNextAvailableSlot(date, startHour, clinicId) {
       };
     }
   }
-  
+
   return null;
 }
 
@@ -67,7 +67,7 @@ function guessGenderFromName(name) {
   const femaleEndings = ['ة', 'اء', 'ى'];
   const femaleNames = ['فاطمة', 'مريم', 'نورا', 'سارة', 'ريم', 'هند', 'منى', 'دعاء', 'آية', 'نور', 'سلمى', 'رنا', 'دينا', 'مها', 'هبة', 'نهى', 'ولاء', 'إيمان', 'أماني'];
   const firstName = name.split(' ')[0];
-  
+
   if (femaleNames.some(fn => firstName.includes(fn))) return 'female';
   if (femaleEndings.some(ending => firstName.endsWith(ending))) return 'female';
   return 'male';
@@ -80,10 +80,10 @@ export const AI_ACTIONS = {
   // Patient Actions
   async createPatientAction(data) {
     const { name, phone, gender, age, address, blood_type, date_of_birth } = data;
-    
+
     if (!name) throw new Error("لازم تديني اسم المريض");
     if (!phone) throw new Error("لازم تديني رقم موبايل المريض");
-    
+
     const patientData = {
       name,
       phone,
@@ -93,45 +93,45 @@ export const AI_ACTIONS = {
       blood_type: blood_type || null,
       date_of_birth: date_of_birth || null
     };
-    
+
     const result = await createPatient(patientData);
-    return { 
-      success: true, 
+    return {
+      success: true,
       message: `تم إضافة المريض "${name}" بنجاح`,
       data: result,
       patientId: result.id
     };
   },
-  
+
   async updatePatientAction(data) {
     const { patientId, ...updateData } = data;
     if (!patientId) throw new Error("لازم تديني ID المريض");
-    
+
     const result = await updatePatient(patientId, updateData);
     return { success: true, message: "تم تعديل بيانات المريض بنجاح", data: result };
   },
-  
+
   async searchPatientAction(data) {
     const { query } = data;
     const { clinicId } = await getClinicContext();
-    
+
     const { data: patients } = await supabase
       .from('patients')
       .select('id, name, phone, gender, age')
       .eq('clinic_id', clinicId)
       .or(`name.ilike.%${query}%,phone.ilike.%${query}%`)
       .limit(10);
-    
+
     return { success: true, patients: patients || [] };
   },
-  
+
   // Disambiguation - resolve ambiguous patient selection
   async resolvePatientAction(data) {
     const { name } = data;
     if (!name) throw new Error("لازم تديني اسم المريض");
-    
+
     const { clinicId } = await getClinicContext();
-    
+
     // Search for patients with similar name
     const { data: patients } = await supabase
       .from('patients')
@@ -139,43 +139,43 @@ export const AI_ACTIONS = {
       .eq('clinic_id', clinicId)
       .ilike('name', `%${name}%`)
       .limit(10);
-    
+
     if (!patients || patients.length === 0) {
-      return { 
-        success: false, 
+      return {
+        success: false,
         message: `مفيش مريض باسم "${name}"`,
-        patients: [] 
+        patients: []
       };
     }
-    
+
     if (patients.length === 1) {
-      return { 
-        success: true, 
+      return {
+        success: true,
         message: `تم العثور على المريض "${patients[0].name}"`,
         patients: patients,
         patientId: patients[0].id,
         needsDisambiguation: false
       };
     }
-    
+
     // Multiple patients found - needs disambiguation
-    return { 
-      success: true, 
+    return {
+      success: true,
       message: `لقيت ${patients.length} مريض باسم "${name}"`,
       patients: patients,
       needsDisambiguation: true
     };
   },
-  
+
   // Appointment Actions
   async createAppointmentAction(data) {
     const { patientId, patientName, patientPhone, date, time, notes, price } = data;
-    
+
     let finalPatientId = patientId;
     let finalPatientPhone = patientPhone;
-    
+
     const { clinicId } = await getClinicContext();
-    
+
     // If no patientId provided, search by name first
     if (!finalPatientId && patientName) {
       const { data: patients } = await supabase
@@ -184,7 +184,7 @@ export const AI_ACTIONS = {
         .eq('clinic_id', clinicId)
         .ilike('name', `%${patientName}%`)
         .limit(5);
-      
+
       if (patients && patients.length > 0) {
         // If exact match found, use it
         const exactMatch = patients.find(p => p.name.toLowerCase() === patientName.toLowerCase());
@@ -198,12 +198,12 @@ export const AI_ACTIONS = {
         }
       }
     }
-    
+
     // If still no patient found and no phone provided, ask for phone
     if (!finalPatientId && !finalPatientPhone) {
       throw new Error(`مفيش مريض باسم "${patientName}" في قاعدة البيانات. محتاج رقم الموبايل عشان أضيفه.`);
     }
-    
+
     // If have phone but no ID, try to find or create patient
     if (!finalPatientId && finalPatientPhone) {
       // Try to find existing patient by phone
@@ -213,7 +213,7 @@ export const AI_ACTIONS = {
         .eq('clinic_id', clinicId)
         .eq('phone', finalPatientPhone)
         .single();
-      
+
       if (existingPatient) {
         finalPatientId = existingPatient.id;
       } else {
@@ -226,10 +226,10 @@ export const AI_ACTIONS = {
         finalPatientId = newPatient.id;
       }
     }
-    
+
     if (!finalPatientId) throw new Error("لازم تديني بيانات المريض (اسمه ورقم موبايله)");
     if (!date) throw new Error("لازم تديني تاريخ الموعد");
-    
+
     // Get booking price from clinic settings if not provided
     let finalPrice = price;
     if (!finalPrice) {
@@ -238,16 +238,16 @@ export const AI_ACTIONS = {
         .select('booking_price')
         .eq('clinic_uuid', clinicId)
         .single();
-      
+
       finalPrice = clinic?.booking_price || 0;
     }
-    
+
     // Combine date and time
     let appointmentDate = date;
     if (time) {
       appointmentDate = `${date}T${time}:00`;
     }
-    
+
     const appointmentData = {
       patient_id: finalPatientId,
       date: appointmentDate,
@@ -255,28 +255,28 @@ export const AI_ACTIONS = {
       price: finalPrice,
       status: 'confirmed'
     };
-    
+
     const result = await createAppointment(appointmentData);
-    return { 
-      success: true, 
+    return {
+      success: true,
       message: `تم إضافة الموعد بنجاح لـ "${patientName}" يوم ${date} ${time ? `الساعة ${time}` : ''}`,
       data: result,
       appointmentId: result.id
     };
   },
-  
+
   // Check availability at specific time slot
   async checkAvailabilityAction(data) {
     const { date, time } = data;
     if (!date || !time) throw new Error("لازم تديني التاريخ والوقت");
-    
+
     const { clinicId } = await getClinicContext();
-    
+
     // Create time range for the hour (e.g., 15:00-16:00)
     const [hour] = time.split(':');
     const startTime = `${date}T${hour}:00:00`;
     const endTime = `${date}T${hour}:59:59`;
-    
+
     // Get appointments in this time slot
     const { data: appointments, count } = await supabase
       .from('appointments')
@@ -285,9 +285,9 @@ export const AI_ACTIONS = {
       .gte('date', startTime)
       .lte('date', endTime)
       .in('status', ['pending', 'confirmed', 'in_progress']);
-    
+
     const isBusy = count >= 3;
-    
+
     if (!isBusy) {
       return {
         success: true,
@@ -297,10 +297,10 @@ export const AI_ACTIONS = {
         appointments: appointments || []
       };
     }
-    
+
     // Find next available slot
     const nextSlot = await findNextAvailableSlot(date, parseInt(hour), clinicId);
-    
+
     return {
       success: true,
       available: false,
@@ -313,50 +313,50 @@ export const AI_ACTIONS = {
       nextAvailableSlot: nextSlot
     };
   },
-  
+
   async updateAppointmentAction(data) {
     const { appointmentId, ...updateData } = data;
     if (!appointmentId) throw new Error("لازم تديني ID الموعد");
-    
+
     const result = await updateAppointment(appointmentId, updateData);
     return { success: true, message: "تم تعديل الموعد بنجاح", data: result };
   },
-  
+
   // Reschedule appointment (change date/time)
   async rescheduleAppointmentAction(data) {
     const { appointmentId, date, time } = data;
     if (!appointmentId) throw new Error("لازم تديني ID الموعد");
     if (!date) throw new Error("لازم تديني التاريخ الجديد");
-    
+
     let appointmentDate = date;
     if (time) {
       appointmentDate = `${date}T${time}:00`;
     }
-    
+
     const result = await updateAppointment(appointmentId, { date: appointmentDate });
-    return { 
-      success: true, 
+    return {
+      success: true,
       message: `تم إعادة جدولة الموعد لـ ${date} ${time ? `الساعة ${time}` : ''}`,
       data: result,
       appointmentId: result.id
     };
   },
-  
+
   async cancelAppointmentAction(data) {
     const { appointmentId } = data;
     if (!appointmentId) throw new Error("لازم تديني ID الموعد");
-    
+
     const result = await updateAppointment(appointmentId, { status: 'cancelled' });
     return { success: true, message: "تم إلغاء الموعد بنجاح", data: result };
   },
-  
+
   // Get appointment details by ID
   async getAppointmentDetailsAction(data) {
     const { appointmentId } = data;
     if (!appointmentId) throw new Error("لازم تديني ID الموعد");
-    
+
     const { clinicId } = await getClinicContext();
-    
+
     const { data: appointment, error } = await supabase
       .from('appointments')
       .select(`
@@ -372,9 +372,9 @@ export const AI_ACTIONS = {
       .eq('id', appointmentId)
       .eq('clinic_id', clinicId)
       .single();
-    
+
     if (error) throw new Error(`مش لاقي الموعد ده: ${error.message}`);
-    
+
     return {
       success: true,
       appointment: {
@@ -393,12 +393,12 @@ export const AI_ACTIONS = {
       }
     };
   },
-  
+
   // Filter appointments by criteria
   async filterAppointmentsAction(data) {
     const { status, date, source, limit = 50 } = data;
     const { clinicId } = await getClinicContext();
-    
+
     let query = supabase
       .from('appointments')
       .select(`
@@ -412,28 +412,28 @@ export const AI_ACTIONS = {
         patient:patients(id, name, phone, age)
       `, { count: 'exact' })
       .eq('clinic_id', clinicId);
-    
+
     // Apply filters
     if (status && status !== 'all') {
       query = query.eq('status', status);
     }
-    
+
     if (source && source !== 'all') {
       query = query.eq('from', source);
     }
-    
+
     if (date) {
       const startDate = `${date}T00:00:00`;
       const endDate = `${date}T23:59:59`;
       query = query.gte('date', startDate).lte('date', endDate);
     }
-    
+
     query = query.order('date', { ascending: false }).limit(limit);
-    
+
     const { data: appointments, count, error } = await query;
-    
+
     if (error) throw new Error(`فشل جلب المواعيد: ${error.message}`);
-    
+
     const formattedAppointments = (appointments || []).map(a => ({
       id: a.id,
       patientName: a.patient?.name || 'غير معروف',
@@ -447,7 +447,7 @@ export const AI_ACTIONS = {
       notes: a.notes,
       createdAt: a.created_at
     }));
-    
+
     // Status labels in Arabic
     const statusLabels = {
       pending: 'معلق',
@@ -457,7 +457,7 @@ export const AI_ACTIONS = {
       rejected: 'مرفوض',
       in_progress: 'جاري الكشف'
     };
-    
+
     return {
       success: true,
       total: count || 0,
@@ -469,33 +469,33 @@ export const AI_ACTIONS = {
       }
     };
   },
-  
+
   // Visit/Examination Actions
   async createVisitAction(data) {
     const { patientId, diagnosis, notes, medications } = data;
-    
+
     if (!patientId) throw new Error("لازم تديني ID المريض");
-    
+
     const visitData = {
       patient_id: patientId,
       diagnosis: diagnosis || null,
       notes: notes || null,
       medications: medications || null
     };
-    
+
     const result = await createVisit(visitData);
     return { success: true, message: "تم إضافة الكشف بنجاح", data: result };
   },
-  
+
   // Staff Actions
   async addStaffAction(data) {
     const { name, email, password, phone, permissions } = data;
     const { clinicId } = await getClinicContext();
-    
+
     if (!name) throw new Error("لازم تديني اسم الموظف");
     if (!email) throw new Error("لازم تديني إيميل الموظف");
     if (!password) throw new Error("لازم تديني باسورد للموظف");
-    
+
     const result = await addSecretary({
       name,
       email,
@@ -504,27 +504,27 @@ export const AI_ACTIONS = {
       clinicId,
       permissions: permissions || ['dashboard', 'calendar', 'patients']
     });
-    
+
     return { success: true, message: `تم إضافة الموظف "${name}" بنجاح`, data: result };
   },
-  
+
   // Clinic Settings Actions
   async setClinicDayOffAction(data) {
     const { day, off } = data;
     const { clinicId } = await getClinicContext();
-    
+
     // Get current clinic settings
     const { data: clinic } = await supabase
       .from('clinics')
       .select('available_time')
       .eq('clinic_uuid', clinicId)
       .single();
-    
+
     let availableTime = clinic?.available_time || {};
     if (typeof availableTime === 'string') {
       availableTime = JSON.parse(availableTime);
     }
-    
+
     // Map day names
     const dayMap = {
       'السبت': 'saturday', 'saturday': 'saturday',
@@ -535,79 +535,79 @@ export const AI_ACTIONS = {
       'الخميس': 'thursday', 'thursday': 'thursday',
       'الجمعة': 'friday', 'friday': 'friday'
     };
-    
+
     const dayKey = dayMap[day.toLowerCase()] || day.toLowerCase();
-    
+
     if (!availableTime[dayKey]) {
       availableTime[dayKey] = { start: '09:00', end: '17:00', off: false };
     }
     availableTime[dayKey].off = off !== false;
-    
+
     await supabase
       .from('clinics')
       .update({ available_time: availableTime })
       .eq('clinic_uuid', clinicId);
-    
-    return { 
-      success: true, 
-      message: off !== false ? `تم إقفال الحجز يوم ${day}` : `تم فتح الحجز يوم ${day}` 
+
+    return {
+      success: true,
+      message: off !== false ? `تم إقفال الحجز يوم ${day}` : `تم فتح الحجز يوم ${day}`
     };
   },
-  
+
   async updateClinicHoursAction(data) {
     const { day, start, end } = data;
     const { clinicId } = await getClinicContext();
-    
+
     const { data: clinic } = await supabase
       .from('clinics')
       .select('available_time')
       .eq('clinic_uuid', clinicId)
       .single();
-    
+
     let availableTime = clinic?.available_time || {};
     if (typeof availableTime === 'string') {
       availableTime = JSON.parse(availableTime);
     }
-    
+
     const dayMap = {
       'السبت': 'saturday', 'الأحد': 'sunday', 'الاثنين': 'monday',
       'الثلاثاء': 'tuesday', 'الأربعاء': 'wednesday',
       'الخميس': 'thursday', 'الجمعة': 'friday'
     };
-    
+
     const dayKey = dayMap[day] || day.toLowerCase();
     availableTime[dayKey] = { start, end, off: false };
-    
+
     await supabase
       .from('clinics')
       .update({ available_time: availableTime })
       .eq('clinic_uuid', clinicId);
-    
+
     return { success: true, message: `تم تعديل مواعيد يوم ${day} من ${start} إلى ${end}` };
   },
-  
+
   async updateBookingPriceAction(data) {
     const { price } = data;
     const { clinicId } = await getClinicContext();
-    
+
     await supabase
       .from('clinics')
       .update({ booking_price: price })
       .eq('clinic_uuid', clinicId);
-    
+
     return { success: true, message: `تم تعديل سعر الكشف إلى ${price} جنيه` };
   },
-  
+
   // Theme & Appearance Actions
   async changeThemeAction(data) {
     const { mode } = data;
-    
+
     if (!['light', 'dark', 'system'].includes(mode)) {
       throw new Error("اختار light أو dark أو system");
     }
-    
+
     const root = document.documentElement;
-    
+
     if (mode === 'light') {
       root.classList.remove('dark');
       localStorage.setItem('theme', 'light');
@@ -623,18 +623,18 @@ export const AI_ACTIONS = {
       }
       localStorage.setItem('theme', 'system');
     }
-    
-    return { 
-      success: true, 
-      message: mode === 'light' ? 'تم التغيير للوضع النهاري' : 
-               mode === 'dark' ? 'تم التغيير للوضع الليلي' : 
-               'تم التغيير لوضع النظام'
+
+    return {
+      success: true,
+      message: mode === 'light' ? 'تم التغيير للوضع النهاري' :
+        mode === 'dark' ? 'تم التغيير للوضع الليلي' :
+          'تم التغيير لوضع النظام'
     };
   },
-  
+
   async changeColorsAction(data) {
     const { primary, secondary, accent, preset } = data;
-    
+
     // Preset color themes - HSL values WITHOUT wrapper (Tailwind format)
     const presets = {
       brown: { primary: '25 59% 30%', secondary: '19 57% 41%', accent: '25 75% 47%' },
@@ -647,42 +647,42 @@ export const AI_ACTIONS = {
       teal: { primary: '174 72% 40%', secondary: '174 84% 32%', accent: '174 58% 50%' },
       default: { primary: '187 85% 35%', secondary: '224 76% 45%', accent: '210 40% 96.1%' }
     };
-    
+
     const root = document.documentElement;
-    
+
     // Use preset if specified
     if (preset && presets[preset]) {
       const colors = presets[preset];
       root.style.setProperty('--primary', colors.primary);
       root.style.setProperty('--secondary', colors.secondary);
       root.style.setProperty('--accent', colors.accent);
-      
+
       // Also update foreground colors for visibility
       root.style.setProperty('--primary-foreground', '0 0% 100%');
       root.style.setProperty('--secondary-foreground', '0 0% 100%');
-      
-      return { 
-        success: true, 
+
+      return {
+        success: true,
         message: `تم تطبيق ألوان ${preset} بنجاح`,
         preset
       };
     }
-    
+
     // Custom hex colors
     if (!primary && !secondary && !accent) {
       throw new Error("لازم تديني لون واحد على الأقل أو اختار preset");
     }
-    
+
     function hexToHSL(hex) {
       hex = hex.replace('#', '');
       let r = parseInt(hex.substring(0, 2), 16) / 255;
       let g = parseInt(hex.substring(2, 4), 16) / 255;
       let b = parseInt(hex.substring(4, 6), 16) / 255;
-      
+
       let max = Math.max(r, g, b);
       let min = Math.min(r, g, b);
       let h, s, l = (max + min) / 2;
-      
+
       if (max === min) {
         h = s = 0;
       } else {
@@ -694,54 +694,54 @@ export const AI_ACTIONS = {
           case b: h = ((r - g) / d + 4) / 6; break;
         }
       }
-      
+
       // Return WITHOUT hsl() wrapper for Tailwind
       return `${Math.round(h * 360)} ${Math.round(s * 100)}% ${Math.round(l * 100)}%`;
     }
-    
+
     if (primary) {
       root.style.setProperty('--primary', hexToHSL(primary));
       root.style.setProperty('--primary-foreground', '0 0% 100%');
     }
-    
+
     if (secondary) {
       root.style.setProperty('--secondary', hexToHSL(secondary));
       root.style.setProperty('--secondary-foreground', '0 0% 100%');
     }
-    
+
     if (accent) {
       root.style.setProperty('--accent', hexToHSL(accent));
     }
-    
-    return { 
-      success: true, 
+
+    return {
+      success: true,
       message: 'تم تغيير الألوان بنجاح'
     };
   },
-  
+
   async setBrownThemeAction(data) {
     const root = document.documentElement;
-    
+
     // Set light mode first
     root.classList.remove('dark');
     localStorage.setItem('theme', 'light');
-    
+
     // Apply brown colors WITHOUT hsl() wrapper
     root.style.setProperty('--primary', '25 59% 30%');
     root.style.setProperty('--primary-foreground', '0 0% 100%');
     root.style.setProperty('--secondary', '19 57% 41%');
     root.style.setProperty('--secondary-foreground', '0 0% 100%');
     root.style.setProperty('--accent', '25 75% 47%');
-    
-    return { 
-      success: true, 
+
+    return {
+      success: true,
       message: 'تم تطبيق الوضع النهاري باللون البني'
     };
   },
-  
+
   async resetThemeAction(data) {
     const root = document.documentElement;
-    
+
     // Remove all custom color properties
     root.style.removeProperty('--primary');
     root.style.removeProperty('--primary-foreground');
@@ -749,29 +749,29 @@ export const AI_ACTIONS = {
     root.style.removeProperty('--secondary-foreground');
     root.style.removeProperty('--accent');
     root.style.removeProperty('--accent-foreground');
-    
+
     // Set light mode
     root.classList.remove('dark');
     localStorage.setItem('theme', 'light');
-    
-    return { 
-      success: true, 
+
+    return {
+      success: true,
       message: 'تم إرجاع الألوان الأصلية'
     };
   },
-  
+
   // Reschedule all appointments from one day to another
   async rescheduleAppointments(data) {
     const { date, fromDate } = data;
     if (!date) throw new Error("لازم تديني التاريخ الجديد");
-    
+
     const { clinicId } = await getClinicContext();
-    
+
     // Get source date (default to today)
     const sourceDate = fromDate || new Date().toISOString().split('T')[0];
     const startTime = `${sourceDate}T00:00:00`;
     const endTime = `${sourceDate}T23:59:59`;
-    
+
     // Get all appointments for the source date (active statuses only)
     const { data: appointments } = await supabase
       .from('appointments')
@@ -781,40 +781,40 @@ export const AI_ACTIONS = {
       .lte('date', endTime)
       .in('status', ['pending', 'confirmed', 'in_progress'])
       .order('date', { ascending: true });
-    
+
     if (!appointments || appointments.length === 0) {
-      return { 
-        success: false, 
+      return {
+        success: false,
         message: `مفيش مواعيد في يوم ${sourceDate} عشان توزعها`,
         rescheduled: 0
       };
     }
-    
+
     // Define time slots (distributed throughout the day)
     const timeSlots = [
       '10:00', '11:00', '12:00', '13:00', '14:00',
       '15:00', '16:00', '17:00', '18:00', '19:00',
       '20:00', '21:00'
     ];
-    
+
     // Check availability for each slot and distribute appointments
     const rescheduledAppointments = [];
     let slotIndex = 0;
-    
+
     for (const appointment of appointments) {
       let scheduled = false;
       let attempts = 0;
-      
+
       // Try to find available slot (max 12 attempts = all slots)
       while (!scheduled && attempts < timeSlots.length) {
         const timeSlot = timeSlots[slotIndex % timeSlots.length];
         const [hour, minute] = timeSlot.split(':');
         const newDateTime = `${date}T${hour}:${minute}:00`;
-        
+
         // Check if this slot is available (less than 3 appointments)
         const slotStart = `${date}T${hour}:00:00`;
         const slotEnd = `${date}T${hour}:59:59`;
-        
+
         const { count } = await supabase
           .from('appointments')
           .select('*', { count: 'exact', head: true })
@@ -822,35 +822,35 @@ export const AI_ACTIONS = {
           .gte('date', slotStart)
           .lte('date', slotEnd)
           .in('status', ['pending', 'confirmed', 'in_progress']);
-        
+
         if (count < 3) {
           // Slot is available - reschedule appointment
           await updateAppointment(appointment.id, {
             date: newDateTime,
-            notes: appointment.notes 
+            notes: appointment.notes
               ? `${appointment.notes}\n[تم التأجيل من ${sourceDate}]`
               : `تم التأجيل من ${sourceDate}`
           });
-          
+
           rescheduledAppointments.push({
             patientName: appointment.patient?.name || 'غير معروف',
             oldTime: appointment.date,
             newTime: newDateTime
           });
-          
+
           scheduled = true;
         }
-        
+
         slotIndex++;
         attempts++;
       }
-      
+
       if (!scheduled) {
         // Could not find slot for this appointment
         console.warn(`Could not reschedule appointment ${appointment.id} - no available slots`);
       }
     }
-    
+
     return {
       success: true,
       message: `تم توزيع ${rescheduledAppointments.length} موعد على يوم ${date}`,
@@ -859,52 +859,52 @@ export const AI_ACTIONS = {
       appointments: rescheduledAppointments
     };
   },
-  
+
   // Database Query Action
   async databaseQueryAction(data) {
     const { table, operation, where, select, limit } = data;
     const { clinicId } = await getClinicContext();
-    
+
     if (!table) throw new Error("لازم تحدد الجدول");
     if (!operation) throw new Error("لازم تحدد نوع العملية");
-    
+
     let query = supabase.from(table);
-    
+
     if (operation === 'select') {
       const selectFields = select || '*';
       query = query.select(selectFields);
       query = query.eq('clinic_id', clinicId);
-      
+
       if (where) {
         Object.entries(where).forEach(([key, value]) => {
           query = query.eq(key, value);
         });
       }
-      
+
       if (limit) {
         query = query.limit(limit);
       }
-      
+
       const { data: results, error } = await query;
       if (error) throw new Error(error.message);
-      
+
       return {
         success: true,
         data: results,
         count: results?.length || 0
       };
     }
-    
+
     throw new Error("عملية غير مدعومة");
   },
-  
+
   // Create Notification
   async createNotificationAction(data) {
     const { type, title, message, patientId, appointmentId } = data;
     const { clinicId } = await getClinicContext();
-    
+
     if (!type || !title) throw new Error("لازم تديني نوع وعنوان الإشعار");
-    
+
     const { data: notification, error } = await supabase
       .from('notifications')
       .insert({
@@ -918,24 +918,24 @@ export const AI_ACTIONS = {
       })
       .select()
       .single();
-    
+
     if (error) throw new Error(error.message);
-    
+
     return {
       success: true,
       message: 'تم إرسال الإشعار بنجاح',
       data: notification
     };
   },
-  
+
   // Analyze Performance
   async analyzeUserPerformanceAction(data) {
     const { period = 'month', metrics = [] } = data;
     const { clinicId } = await getClinicContext();
-    
+
     const now = new Date();
     let startDate;
-    
+
     switch (period) {
       case 'week':
         startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
@@ -949,9 +949,9 @@ export const AI_ACTIONS = {
       default:
         startDate = new Date(now.getFullYear(), now.getMonth(), 1);
     }
-    
+
     const results = {};
-    
+
     if (metrics.includes('appointments_count') || metrics.length === 0) {
       const { count } = await supabase
         .from('appointments')
@@ -960,7 +960,7 @@ export const AI_ACTIONS = {
         .gte('created_at', startDate.toISOString());
       results.appointments_count = count || 0;
     }
-    
+
     if (metrics.includes('revenue') || metrics.length === 0) {
       const { data: appointments } = await supabase
         .from('appointments')
@@ -969,7 +969,7 @@ export const AI_ACTIONS = {
         .gte('created_at', startDate.toISOString());
       results.revenue = appointments?.reduce((sum, a) => sum + (a.price || 0), 0) || 0;
     }
-    
+
     if (metrics.includes('new_patients') || metrics.length === 0) {
       const { count } = await supabase
         .from('patients')
@@ -978,13 +978,433 @@ export const AI_ACTIONS = {
         .gte('created_at', startDate.toISOString());
       results.new_patients = count || 0;
     }
-    
+
     return {
       success: true,
       period,
       startDate: startDate.toISOString().split('T')[0],
       endDate: now.toISOString().split('T')[0],
       metrics: results
+    };
+  },
+
+  // Delete Patient Action
+  async deletePatientAction(data) {
+    const { patientId } = data;
+    if (!patientId) throw new Error("لازم تديني ID المريض");
+
+    const { clinicId } = await getClinicContext();
+
+    // First, get patient info for confirmation message
+    const { data: patient } = await supabase
+      .from('patients')
+      .select('name')
+      .eq('id', patientId)
+      .eq('clinic_id', clinicId)
+      .single();
+
+    if (!patient) throw new Error("مش لاقي المريض ده");
+
+    // Delete the patient (cascade will handle related records)
+    const { error } = await supabase
+      .from('patients')
+      .delete()
+      .eq('id', patientId)
+      .eq('clinic_id', clinicId);
+
+    if (error) throw new Error(`فشل الحذف: ${error.message}`);
+
+    return {
+      success: true,
+      message: `تم حذف المريض "${patient.name}" بنجاح`
+    };
+  },
+
+  // Delete Appointment Action
+  async deleteAppointmentAction(data) {
+    const { appointmentId } = data;
+    if (!appointmentId) throw new Error("لازم تديني ID الموعد");
+
+    const { clinicId } = await getClinicContext();
+
+    // Get appointment info for confirmation
+    const { data: appointment } = await supabase
+      .from('appointments')
+      .select('date, patient:patients(name)')
+      .eq('id', appointmentId)
+      .eq('clinic_id', clinicId)
+      .single();
+
+    if (!appointment) throw new Error("مش لاقي الموعد ده");
+
+    // Delete the appointment
+    const { error } = await supabase
+      .from('appointments')
+      .delete()
+      .eq('id', appointmentId)
+      .eq('clinic_id', clinicId);
+
+    if (error) throw new Error(`فشل الحذف: ${error.message}`);
+
+    return {
+      success: true,
+      message: `تم حذف موعد "${appointment.patient?.name || 'غير معروف'}" بنجاح`
+    };
+  },
+
+  // Delete Visit Action
+  async deleteVisitAction(data) {
+    const { visitId } = data;
+    if (!visitId) throw new Error("لازم تديني ID الكشف");
+
+    const { clinicId } = await getClinicContext();
+
+    // Get visit info for confirmation
+    const { data: visit } = await supabase
+      .from('visits')
+      .select('patient:patients(name)')
+      .eq('id', visitId)
+      .eq('clinic_id', clinicId)
+      .single();
+
+    if (!visit) throw new Error("مش لاقي الكشف ده");
+
+    // Delete the visit
+    const { error } = await supabase
+      .from('visits')
+      .delete()
+      .eq('id', visitId)
+      .eq('clinic_id', clinicId);
+
+    if (error) throw new Error(`فشل الحذف: ${error.message}`);
+
+    return {
+      success: true,
+      message: `تم حذف كشف "${visit.patient?.name || 'غير معروف'}" بنجاح`
+    };
+  },
+
+  // Update Visit Action
+  async updateVisitAction(data) {
+    const { visitId, diagnosis, notes, medications } = data;
+    if (!visitId) throw new Error("لازم تديني ID الكشف");
+
+    const { clinicId } = await getClinicContext();
+
+    const updateData = {};
+    if (diagnosis !== undefined) updateData.diagnosis = diagnosis;
+    if (notes !== undefined) updateData.notes = notes;
+    if (medications !== undefined) updateData.medications = medications;
+
+    const { data: result, error } = await supabase
+      .from('visits')
+      .update(updateData)
+      .eq('id', visitId)
+      .eq('clinic_id', clinicId)
+      .select()
+      .single();
+
+    if (error) throw new Error(`فشل التعديل: ${error.message}`);
+
+    return {
+      success: true,
+      message: "تم تعديل الكشف بنجاح",
+      data: result
+    };
+  },
+
+  // Create Treatment Plan Action
+  async createTreatmentPlanAction(data) {
+    const { patientId, templateId, name, totalSessions, sessionPrice, notes } = data;
+    if (!patientId) throw new Error("لازم تديني ID المريض");
+
+    const { clinicId } = await getClinicContext();
+
+    const planData = {
+      clinic_id: clinicId,
+      patient_id: patientId,
+      template_id: templateId || null,
+      status: 'active',
+      total_sessions: totalSessions || 1,
+      completed_sessions: 0,
+      notes: notes || null
+    };
+
+    const { data: result, error } = await supabase
+      .from('patient_plans')
+      .insert(planData)
+      .select()
+      .single();
+
+    if (error) throw new Error(`فشل الإضافة: ${error.message}`);
+
+    return {
+      success: true,
+      message: "تم إضافة الخطة العلاجية بنجاح",
+      planId: result.id,
+      data: result
+    };
+  },
+
+  // Update Treatment Plan Action
+  async updateTreatmentPlanAction(data) {
+    const { planId, status, completedSessions, notes } = data;
+    if (!planId) throw new Error("لازم تديني ID الخطة");
+
+    const { clinicId } = await getClinicContext();
+
+    const updateData = {};
+    if (status !== undefined) updateData.status = status;
+    if (completedSessions !== undefined) updateData.completed_sessions = completedSessions;
+    if (notes !== undefined) updateData.notes = notes;
+
+    const { data: result, error } = await supabase
+      .from('patient_plans')
+      .update(updateData)
+      .eq('id', planId)
+      .eq('clinic_id', clinicId)
+      .select()
+      .single();
+
+    if (error) throw new Error(`فشل التعديل: ${error.message}`);
+
+    return {
+      success: true,
+      message: "تم تعديل الخطة العلاجية بنجاح",
+      data: result
+    };
+  },
+
+  // Delete Treatment Plan Action
+  async deleteTreatmentPlanAction(data) {
+    const { planId } = data;
+    if (!planId) throw new Error("لازم تديني ID الخطة");
+
+    const { clinicId } = await getClinicContext();
+
+    const { error } = await supabase
+      .from('patient_plans')
+      .delete()
+      .eq('id', planId)
+      .eq('clinic_id', clinicId);
+
+    if (error) throw new Error(`فشل الحذف: ${error.message}`);
+
+    return {
+      success: true,
+      message: "تم حذف الخطة العلاجية بنجاح"
+    };
+  },
+
+  // Get Patient Details Action
+  async getPatientDetailsAction(data) {
+    const { patientId } = data;
+    if (!patientId) throw new Error("لازم تديني ID المريض");
+
+    const { clinicId } = await getClinicContext();
+
+    const { data: patient, error } = await supabase
+      .from('patients')
+      .select(`
+        id,
+        name,
+        phone,
+        age,
+        gender,
+        address,
+        blood_type,
+        date_of_birth,
+        created_at,
+        notes
+      `)
+      .eq('id', patientId)
+      .eq('clinic_id', clinicId)
+      .single();
+
+    if (error) throw new Error(`مش لاقي المريض ده: ${error.message}`);
+
+    // Get patient's appointments
+    const { data: appointments } = await supabase
+      .from('appointments')
+      .select('id, date, status, price')
+      .eq('patient_id', patientId)
+      .eq('clinic_id', clinicId)
+      .order('date', { ascending: false })
+      .limit(10);
+
+    // Get patient's visits
+    const { data: visits } = await supabase
+      .from('visits')
+      .select('id, diagnosis, created_at')
+      .eq('patient_id', patientId)
+      .eq('clinic_id', clinicId)
+      .order('created_at', { ascending: false })
+      .limit(10);
+
+    // Get patient's treatment plans
+    const { data: plans } = await supabase
+      .from('patient_plans')
+      .select('id, status, total_sessions, completed_sessions')
+      .eq('patient_id', patientId)
+      .eq('clinic_id', clinicId);
+
+    return {
+      success: true,
+      patient: {
+        ...patient,
+        appointments: appointments || [],
+        visits: visits || [],
+        treatmentPlans: plans || []
+      }
+    };
+  },
+
+  // Get Notifications Details Action
+  async getNotificationsDetailsAction(data) {
+    const { limit = 20, unreadOnly = false, type } = data || {};
+    const { clinicId } = await getClinicContext();
+
+    let query = supabase
+      .from('notifications')
+      .select(`
+        id,
+        title,
+        message,
+        type,
+        is_read,
+        created_at,
+        patient_id,
+        appointment_id
+      `)
+      .eq('clinic_id', clinicId)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
+    if (unreadOnly) {
+      query = query.eq('is_read', false);
+    }
+
+    if (type) {
+      query = query.eq('type', type);
+    }
+
+    const { data: notifications, error } = await query;
+
+    if (error) throw new Error(`فشل جلب الإشعارات: ${error.message}`);
+
+    // Format notifications for AI
+    const formattedNotifications = (notifications || []).map(n => ({
+      id: n.id,
+      title: n.title,
+      message: n.message,
+      type: n.type,
+      isRead: n.is_read,
+      date: n.created_at,
+      patientId: n.patient_id,
+      appointmentId: n.appointment_id
+    }));
+
+    return {
+      success: true,
+      total: formattedNotifications.length,
+      notifications: formattedNotifications
+    };
+  },
+
+  // Mark Notification as Read Action
+  async markNotificationReadAction(data) {
+    const { notificationId, markAll = false } = data;
+    const { clinicId } = await getClinicContext();
+
+    if (markAll) {
+      const { error } = await supabase
+        .from('notifications')
+        .update({ is_read: true })
+        .eq('clinic_id', clinicId)
+        .eq('is_read', false);
+
+      if (error) throw new Error(`فشل التحديث: ${error.message}`);
+
+      return {
+        success: true,
+        message: "تم تعليم كل الإشعارات كمقروءة"
+      };
+    }
+
+    if (!notificationId) throw new Error("لازم تديني ID الإشعار");
+
+    const { error } = await supabase
+      .from('notifications')
+      .update({ is_read: true })
+      .eq('id', notificationId)
+      .eq('clinic_id', clinicId);
+
+    if (error) throw new Error(`فشل التحديث: ${error.message}`);
+
+    return {
+      success: true,
+      message: "تم تعليم الإشعار كمقروء"
+    };
+  },
+
+  // Get Today's Schedule Action
+  async getTodayScheduleAction(data) {
+    const { clinicId } = await getClinicContext();
+    const today = new Date().toISOString().split('T')[0];
+
+    const { data: appointments, error } = await supabase
+      .from('appointments')
+      .select(`
+        id,
+        date,
+        status,
+        price,
+        notes,
+        from,
+        patient:patients(id, name, phone, age)
+      `)
+      .eq('clinic_id', clinicId)
+      .gte('date', `${today}T00:00:00`)
+      .lte('date', `${today}T23:59:59`)
+      .order('date', { ascending: true });
+
+    if (error) throw new Error(`فشل جلب المواعيد: ${error.message}`);
+
+    const statusLabels = {
+      pending: 'معلق',
+      confirmed: 'مؤكد',
+      completed: 'مكتمل',
+      cancelled: 'ملغي',
+      in_progress: 'جاري الكشف'
+    };
+
+    const formattedAppointments = (appointments || []).map(a => ({
+      id: a.id,
+      patientName: a.patient?.name || 'غير معروف',
+      patientPhone: a.patient?.phone || '',
+      patientAge: a.patient?.age,
+      time: a.date ? new Date(a.date).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }) : '',
+      status: a.status,
+      statusArabic: statusLabels[a.status] || a.status,
+      price: a.price,
+      source: a.from === 'booking' ? 'إلكتروني' : 'العيادة',
+      notes: a.notes
+    }));
+
+    const summary = {
+      total: formattedAppointments.length,
+      pending: formattedAppointments.filter(a => a.status === 'pending').length,
+      confirmed: formattedAppointments.filter(a => a.status === 'confirmed').length,
+      completed: formattedAppointments.filter(a => a.status === 'completed').length,
+      fromOnline: formattedAppointments.filter(a => a.source === 'إلكتروني').length,
+      fromClinic: formattedAppointments.filter(a => a.source === 'العيادة').length
+    };
+
+    return {
+      success: true,
+      date: today,
+      summary,
+      appointments: formattedAppointments
     };
   }
 };
@@ -1037,7 +1457,7 @@ async function getPatientsData() {
     const startOfMonth = new Date();
     startOfMonth.setDate(1);
     startOfMonth.setHours(0, 0, 0, 0);
-    
+
     const { count: thisMonth } = await supabase
       .from('patients')
       .select('*', { count: 'exact', head: true })
@@ -1097,7 +1517,7 @@ async function getVisitsData() {
     const startOfMonth = new Date();
     startOfMonth.setDate(1);
     startOfMonth.setHours(0, 0, 0, 0);
-    
+
     const { count: thisMonth } = await supabase
       .from('visits')
       .select('*', { count: 'exact', head: true })
@@ -1139,7 +1559,7 @@ async function getAppointmentsData() {
 
     const today = new Date();
     const todayStr = today.toISOString().split('T')[0];
-    
+
     // Get ALL appointments with FULL details
     const { data: allAppointments, count: totalCount } = await supabase
       .from('appointments')
@@ -1155,21 +1575,21 @@ async function getAppointmentsData() {
       `, { count: 'exact' })
       .eq('clinic_id', clinicId)
       .order('date', { ascending: false });
-    
+
     if (!allAppointments) return null;
-    
+
     // Get today's appointments with full details
     const todayAppts = allAppointments.filter(a => {
       const apptDate = a.date ? new Date(a.date).toISOString().split('T')[0] : null;
       return apptDate === todayStr;
     });
-    
+
     // Get this week's appointments
     const weekStart = new Date(today);
     weekStart.setDate(today.getDate() - today.getDay());
     const weekEnd = new Date(weekStart);
     weekEnd.setDate(weekStart.getDate() + 6);
-    
+
     const weekAppts = allAppointments.filter(a => {
       if (!a.date) return false;
       const apptDate = new Date(a.date);
@@ -1179,7 +1599,7 @@ async function getAppointmentsData() {
     // Get this month's appointments
     const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
     const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-    
+
     const monthAppts = allAppointments.filter(a => {
       if (!a.date) return false;
       const apptDate = new Date(a.date);
@@ -1189,7 +1609,7 @@ async function getAppointmentsData() {
     // Get previous month's appointments for comparison
     const prevMonthStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
     const prevMonthEnd = new Date(today.getFullYear(), today.getMonth(), 0);
-    
+
     const prevMonthAppts = allAppointments.filter(a => {
       if (!a.date) return false;
       const apptDate = new Date(a.date);
@@ -1199,7 +1619,7 @@ async function getAppointmentsData() {
     // Get past appointments (last 30 days)
     const thirtyDaysAgo = new Date(today);
     thirtyDaysAgo.setDate(today.getDate() - 30);
-    
+
     const pastAppts = allAppointments.filter(a => {
       if (!a.date) return false;
       const apptDate = new Date(a.date);
@@ -1209,7 +1629,7 @@ async function getAppointmentsData() {
     // Get future appointments (next 30 days)
     const thirtyDaysLater = new Date(today);
     thirtyDaysLater.setDate(today.getDate() + 30);
-    
+
     const futureAppts = allAppointments.filter(a => {
       if (!a.date) return false;
       const apptDate = new Date(a.date);
@@ -1225,20 +1645,20 @@ async function getAppointmentsData() {
     // Source breakdown
     const fromOnline = todayAppts.filter(a => a.from === 'booking');
     const fromClinic = todayAppts.filter(a => a.from !== 'booking');
-    
+
     // Financial data
     const totalRevenue = allAppointments
       .filter(a => a.status === 'completed')
       .reduce((sum, a) => sum + (a.price || 0), 0);
-    
+
     const todayRevenue = todayAppts
       .filter(a => a.status === 'completed')
       .reduce((sum, a) => sum + (a.price || 0), 0);
-    
+
     const monthRevenue = monthAppts
       .filter(a => a.status === 'completed')
       .reduce((sum, a) => sum + (a.price || 0), 0);
-    
+
     // Format appointments for AI
     const formatAppointment = (a) => ({
       id: a.id,
@@ -1290,8 +1710,8 @@ async function getAppointmentsData() {
       previousMonth: {
         total: prevMonthAppts.length
       },
-      monthOverMonthChange: prevMonthAppts.length > 0 
-        ? Math.round(((monthAppts.length - prevMonthAppts.length) / prevMonthAppts.length) * 100) 
+      monthOverMonthChange: prevMonthAppts.length > 0
+        ? Math.round(((monthAppts.length - prevMonthAppts.length) / prevMonthAppts.length) * 100)
         : 0,
       past: {
         total: pastAppts.length,
@@ -1358,7 +1778,7 @@ async function getFinanceData() {
     // Calculate totals
     const income = (monthRecords || []).filter(r => r.type === 'income' || r.amount > 0);
     const expenses = (monthRecords || []).filter(r => r.type === 'expense' || r.amount < 0);
-    
+
     const totalIncome = income.reduce((sum, r) => sum + Math.abs(r.amount || 0), 0);
     const totalExpenses = expenses.reduce((sum, r) => sum + Math.abs(r.amount || 0), 0);
     const netProfit = totalIncome - totalExpenses;
@@ -1405,23 +1825,23 @@ function getMonthlyBreakdownFromRecords(records) {
     'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو',
     'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'
   ];
-  
+
   records.forEach(r => {
     const date = new Date(r.created_at);
     const monthKey = `${date.getFullYear()}-${date.getMonth()}`;
     const monthName = arabicMonths[date.getMonth()];
-    
+
     if (!months[monthKey]) {
       months[monthKey] = { name: monthName, income: 0, expenses: 0 };
     }
-    
+
     if (r.type === 'income' || r.amount > 0) {
       months[monthKey].income += Math.abs(r.amount || 0);
     } else {
       months[monthKey].expenses += Math.abs(r.amount || 0);
     }
   });
-  
+
   // Return last 6 months sorted
   return Object.values(months).slice(-6);
 }
@@ -1454,10 +1874,10 @@ async function getClinicSettingsData() {
     // Parse available time
     let workingHours = {};
     if (clinic.available_time) {
-      const days = typeof clinic.available_time === 'string' 
-        ? JSON.parse(clinic.available_time) 
+      const days = typeof clinic.available_time === 'string'
+        ? JSON.parse(clinic.available_time)
         : clinic.available_time;
-      
+
       Object.keys(days).forEach(day => {
         if (!days[day].off) {
           workingHours[day] = `${days[day].start} - ${days[day].end}`;
@@ -1591,7 +2011,7 @@ async function getStaffData() {
     const staffWithPermissions = (staff || []).map(s => {
       let perms = [];
       if (typeof s.permissions === 'string') {
-        try { perms = JSON.parse(s.permissions); } catch (e) {}
+        try { perms = JSON.parse(s.permissions); } catch (e) { }
       } else if (Array.isArray(s.permissions)) {
         perms = s.permissions;
       }
@@ -1967,16 +2387,16 @@ const getSystemPrompt = (userData, clinicData, subscriptionData, statsData, allD
   const { subDetails, treatmentData, staffData, workModeData, notificationsData, onlineBookingData, patientsData, visitsData, appointmentsData, financeData, clinicSettingsData, patientPlansData } = allData || {};
   const userName = userData?.name || "المستخدم";
   const clinicName = clinicData?.name || "العيادة";
-  
+
   // Get current date/time
   const dateTime = getCurrentDateTime();
-  
+
   // Stats data
   const totalPatients = statsData?.totalPatients || 0;
   const todayAppointments = statsData?.todayAppointments || 0;
   const pendingAppointments = statsData?.pendingAppointments || 0;
   const totalIncome = statsData?.totalIncome || 0;
-  
+
   // Subscription details (accurate from database)
   const planName = subDetails?.planName || 'الباقة المجانية';
   const maxPatients = subDetails?.limits?.maxPatients ?? 50;
@@ -1986,24 +2406,24 @@ const getSystemPrompt = (userData, clinicData, subscriptionData, statsData, allD
   const patientsPercentage = subDetails?.limits?.patientsPercentage ?? 0;
   const appointmentsPercentage = subDetails?.limits?.appointmentsPercentage ?? 0;
   const patientsRemaining = typeof maxPatients === 'number' ? maxPatients - patientsUsed : 'غير محدود';
-  
+
   // Booking source data
   const onlineAppointments = subDetails?.bookingSources?.onlineAppointments ?? 0;
   const clinicAppointments = subDetails?.bookingSources?.clinicAppointments ?? 0;
   const totalMonthlyAppointments = subDetails?.bookingSources?.totalMonthlyAppointments ?? 0;
   const onlinePercentage = subDetails?.bookingSources?.onlinePercentage ?? 0;
   const clinicPercentage = subDetails?.bookingSources?.clinicPercentage ?? 0;
-  
+
   // Treatment templates data
   const totalTemplates = treatmentData?.total || 0;
   const templatesList = treatmentData?.templates || [];
   const templatesPreview = templatesList.slice(0, 5).map(t => `${t.name} (${t.session_price} جنيه)`).join('، ') || 'لا يوجد';
-  
+
   // Staff data
   const totalStaff = staffData?.total || 0;
   const staffList = staffData?.staff || [];
   const staffPreview = staffList.slice(0, 3).map(s => s.name).join('، ') || 'لا يوجد';
-  
+
   // Work mode data
   const workModePending = workModeData?.pending || 0;
   const workModeConfirmed = workModeData?.confirmed || 0;
@@ -2011,15 +2431,15 @@ const getSystemPrompt = (userData, clinicData, subscriptionData, statsData, allD
   const workModeCompleted = workModeData?.completed || 0;
   const workModeTotal = workModeData?.total || 0;
   const nextPatient = workModeData?.nextPatient || 'مفيش';
-  
+
   // Notifications data
   const unreadNotifications = notificationsData?.unreadCount || 0;
-  
+
   // Online booking data
   const onlineBookingEnabled = onlineBookingData?.enabled ?? true;
   const bookingLink = onlineBookingData?.bookingLink || '';
   const bookingPrice = onlineBookingData?.bookingPrice || 0;
-  
+
   // Patients data
   const patientsTotal = patientsData?.total || 0;
   const patientsThisMonth = patientsData?.thisMonth || 0;
@@ -2027,12 +2447,12 @@ const getSystemPrompt = (userData, clinicData, subscriptionData, statsData, allD
   const patientsFemales = patientsData?.females || 0;
   const recentPatients = patientsData?.recentPatients || [];
   const recentPatientsPreview = recentPatients.slice(0, 5).map(p => p.name).join('، ') || 'لا يوجد';
-  
+
   // Visits data
   const visitsTotal = visitsData?.total || 0;
   const visitsThisMonth = visitsData?.thisMonth || 0;
   const recentVisits = visitsData?.recentVisits || [];
-  
+
   // Appointments data
   const appointmentsTotal = appointmentsData?.total || 0;
   const appointmentsToday = appointmentsData?.today || {};
@@ -2043,24 +2463,24 @@ const getSystemPrompt = (userData, clinicData, subscriptionData, statsData, allD
   const appointmentsPast = appointmentsData?.past || {};
   const appointmentsFuture = appointmentsData?.future || {};
   const todayAppointmentsList = appointmentsData?.todayAppointments || [];
-  
+
   // Finance data
   const financeThisMonth = financeData?.thisMonth || {};
   const financeThisYear = financeData?.thisYear || {};
   const recentTransactions = financeData?.recentTransactions || [];
   const financeMonthlyBreakdown = financeData?.monthlyBreakdown || [];
-  
+
   // Clinic settings data
   const clinicAddress = clinicSettingsData?.address || 'غير محدد';
   const workingHours = clinicSettingsData?.workingHours || {};
   const workingHoursPreview = Object.entries(workingHours).slice(0, 3).map(([day, hours]) => `${day}: ${hours}`).join(' | ') || 'غير محدد';
-  
+
   // Patient plans data
   const patientPlansTotal = patientPlansData?.total || 0;
   const patientPlansActive = patientPlansData?.active || 0;
   const patientPlansCompleted = patientPlansData?.completed || 0;
   const patientPlansList = patientPlansData?.plans || [];
-  
+
   return `انت اسمك "طبيبي" (Tabibi) - مساعد ذكي متقدم لمنصة إدارة العيادات. بترد باللهجة المصرية بطريقة ودودة ومختصرة.
 
 ## معلومات الوقت:
@@ -2645,7 +3065,7 @@ export async function changeThemeMode(mode) {
     if (!validModes.includes(mode)) {
       throw new Error('وضع غير صحيح');
     }
-    
+
     await updateUserPreferences({ theme_mode: mode });
     return { success: true, message: `تم التغيير إلى الوضع ${mode === 'dark' ? 'الليلي' : mode === 'light' ? 'النهاري' : 'التلقائي'}` };
   } catch (error) {
@@ -2661,7 +3081,7 @@ export async function changeColors(primaryColor, secondaryColor, accentColor) {
     if (primaryColor) updates.primary_color = primaryColor;
     if (secondaryColor) updates.secondary_color = secondaryColor;
     if (accentColor) updates.accent_color = accentColor;
-    
+
     await updateUserPreferences(updates);
     return { success: true, message: 'تم تغيير الألوان بنجاح' };
   } catch (error) {
@@ -2675,7 +3095,7 @@ export async function reorderMenuItem(itemId, newPosition) {
   try {
     const prefs = await getUserPreferences();
     let menuItems = prefs?.menu_items || [];
-    
+
     // If no custom order exists, create default order
     if (menuItems.length === 0) {
       menuItems = [
@@ -2690,25 +3110,25 @@ export async function reorderMenuItem(itemId, newPosition) {
         { id: 'settings', label: 'الإعدادات', order: 9, enabled: true },
       ];
     }
-    
+
     // Find the item to move
     const itemIndex = menuItems.findIndex(item => item.id === itemId);
     if (itemIndex === -1) {
       throw new Error('العنصر غير موجود');
     }
-    
+
     // Remove item from current position
     const [item] = menuItems.splice(itemIndex, 1);
-    
+
     // Insert at new position (1-based to 0-based index)
     menuItems.splice(newPosition - 1, 0, item);
-    
+
     // Update order numbers
     menuItems = menuItems.map((item, index) => ({
       ...item,
       order: index + 1
     }));
-    
+
     await updateUserPreferences({ menu_items: menuItems });
     return { success: true, message: 'تم تغيير ترتيب المنيو بنجاح', menuItems };
   } catch (error) {
@@ -2730,7 +3150,7 @@ export async function resetToDefaultSettings() {
       menu_items: [],
       dashboard_widgets: [],
     };
-    
+
     await updateUserPreferences(defaultSettings);
     return { success: true, message: 'تم إعادة كل الإعدادات للوضع الافتراضي بنجاح' };
   } catch (error) {

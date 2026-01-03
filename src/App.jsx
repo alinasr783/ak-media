@@ -14,6 +14,7 @@ import AppointmentDetailPage from "./features/calendar/AppointmentDetailPage";
 import PatientDetailPage from "./features/patients/PatientDetailPage";
 import PatientPlanDetailPage from "./features/patients/PatientPlanDetailPage";
 import VisitDetailPage from "./features/patients/VisitDetailPage";
+import ExaminationsPage from "./features/examinations/ExaminationsPage";
 import Booking from "./pages/Booking";
 import Calendar from "./pages/Calendar";
 import Clinic from "./pages/Clinic";
@@ -27,11 +28,14 @@ import Patients from "./pages/Patients";
 import PlanConfirmation from "./pages/PlanConfirmation";
 import PaymentCallback from "./pages/PaymentCallback";
 import Settings from "./pages/Settings";
+import Integrations from "./pages/Integrations";
 import Signup from "./pages/Signup";
 import TreatmentPlans from "./pages/TreatmentPlans";
 import Staff from "./pages/Staff";
 import Subscriptions from "./pages/Subscriptions";
 import WorkMode from "./pages/WorkMode";
+import PrivacyPolicy from "./pages/PrivacyPolicy";
+import TermsOfService from "./pages/TermsOfService";
 import { AskTabibiPage } from "./ai/ui";
 import OfflineIndicator from "./components/OfflineIndicator";
 import { OfflineProvider } from "./features/offline-mode/OfflineContext";
@@ -50,17 +54,21 @@ const MemoizedCalendar = memo(Calendar);
 const MemoizedPatients = memo(Patients);
 const MemoizedPatientDetailPage = memo(PatientDetailPage);
 const MemoizedVisitDetailPage = memo(VisitDetailPage);
+const MemoizedExaminationsPage = memo(ExaminationsPage);
 const MemoizedPatientPlanDetailPage = memo(PatientPlanDetailPage);
 const MemoizedAppointmentDetailPage = memo(AppointmentDetailPage);
 const MemoizedClinic = memo(Clinic);
 const MemoizedTreatmentPlans = memo(TreatmentPlans);
 const MemoizedSettings = memo(Settings);
+const MemoizedIntegrations = memo(Integrations);
 const MemoizedFinance = memo(Finance);
 const MemoizedOnlineBooking = memo(OnlineBooking);
 const MemoizedNotifications = memo(Notifications);
 const MemoizedStaff = memo(Staff);
 const MemoizedSubscriptions = memo(Subscriptions);
 const MemoizedWorkMode = memo(WorkMode);
+const MemoizedPrivacyPolicy = memo(PrivacyPolicy);
+const MemoizedTermsOfService = memo(TermsOfService);
 const MemoizedAskTabibi = memo(AskTabibiPage);
 
 function AppRoutes() {
@@ -70,6 +78,8 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/" element={<MemoizedLanding />} />
+      <Route path="/privacy-policy" element={<MemoizedPrivacyPolicy />} />
+      <Route path="/terms-of-service" element={<MemoizedTermsOfService />} />
       <Route
         path="/login"
         element={
@@ -120,6 +130,16 @@ function AppRoutes() {
             <PermissionGuard requiredPermission="patients">
               <SubscriptionExpiryGuard>
                 <MemoizedPatients />
+              </SubscriptionExpiryGuard>
+            </PermissionGuard>
+          }
+        />
+        <Route
+          path="examinations"
+          element={
+            <PermissionGuard requiredPermission="patients">
+              <SubscriptionExpiryGuard>
+                <MemoizedExaminationsPage />
               </SubscriptionExpiryGuard>
             </PermissionGuard>
           }
@@ -187,6 +207,14 @@ function AppRoutes() {
           element={
             <PermissionGuard requiredPermission="settings">
               <MemoizedSettings />
+            </PermissionGuard>
+          }
+        />
+        <Route
+          path="/integrations"
+          element={
+            <PermissionGuard requiredPermission="settings">
+              <MemoizedIntegrations />
             </PermissionGuard>
           }
         />

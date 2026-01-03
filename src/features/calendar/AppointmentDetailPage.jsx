@@ -396,10 +396,9 @@ export default function AppointmentDetailPage() {
     );
   }
 
-  const StatusIcon = statusConfig[optimisticStatus || appointment?.status]?.icon || Clock3;
-
-  // Use optimistic status if available, otherwise use actual status
-  const currentStatus = optimisticStatus || appointment?.status;
+  const rawStatus = optimisticStatus || appointment?.status;
+  const currentStatus = rawStatus?.toLowerCase() || 'pending';
+  const StatusIcon = statusConfig[currentStatus]?.icon || Clock3;
 
   return (
     <div className="min-h-screen bg-background p-3 md:p-6 pb-20 md:pb-0" dir="rtl">
